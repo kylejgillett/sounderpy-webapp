@@ -11,6 +11,7 @@ const status = $(".spy-status");
 const result = $(".spy-result");
 const settingsEl = $("#settings");
 let lastRequest = null;
+let lastShareUrl = null; // address of the sounding on screen, with the settings it was made with
 
 // ---- API ------------------------------------------------------------------
 
@@ -227,6 +228,7 @@ function clearResult() {
   requestId++;
   clearInterval(timer);
   lastRequest = null;
+  lastShareUrl = null;
   const img = $("img", result);
   img.removeAttribute("src");
   img.alt = "";
@@ -238,11 +240,16 @@ function clearResult() {
   setBusy(false);
 }
 
-async function getSounding(form) {
+function getSounding(form) {
   let req;
   try { req = buildRequest(form); } catch (err) { return showError(err, "Check your request"); }
+  runSounding(req, { record: true });
+}
 
+// `record` adds the sounding to the address bar and browser history (see shareable links below).
+async function runSounding(req, { record = false } = {}) {
   const id = ++requestId;
+  const shareUrl = requestUrl(req); // captured now, so later setting changes don't alter it
   setBusy(true);
   startLoading(req);
   result.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -256,6 +263,8 @@ async function getSounding(form) {
     img.alt = label;
     $(".spy-image-link").href = image;
     $('[data-download="png"]').href = image;
+    lastShareUrl = shareUrl;
+    if (record && shareUrl !== location.pathname + location.search) history.pushState(null, "", shareUrl);
     setBusy(false);
     stopLoading();
   } catch (err) {
@@ -382,7 +391,7 @@ const CREDITS = {
 };
 
 let currentTab = null;
-function showTab(name) {
+function showTab(name, { keepUrl = false } = {}) {
   if (currentTab && currentTab !== name) clearResult();
   currentTab = name;
   $(".spy-credit").textContent = CREDITS[name];
@@ -392,7 +401,7 @@ function showTab(name) {
     if (!p.hidden) initMap(p);
   });
   status.textContent = "";
-  if (location.hash !== `#${name}`) history.replaceState(null, "", `#${name}`);
+  if (!keepUrl) history.replaceState(null, "", `${location.pathname}#${name}`);
 }
 
 // ---- Init ---------------------------------------------------------------------
@@ -433,14 +442,131 @@ function updateSettingsCount() {
   badge.hidden = n === 0;
 }
 settingsForm.addEventListener("submit", (e) => e.preventDefault());
-settingsForm.addEventListener("input", updateSettingsCount);
-settingsForm.addEventListener("change", updateSettingsCount);
-$("[data-settings-reset]").addEventListener("click", () => { settingsForm.reset(); updateSettingsCount(); });
-updateSettingsCount();
+settingsForm.addEventListener("input", () => { updateSettingsCount(); saveSettings(); });
+settingsForm.addEventListener("change", () => { updateSettingsCount(); saveSettings(); });
+$("[data-settings-reset]").addEventListener("click", () => { settingsForm.reset(); updateSettingsCount(); saveSettings(); });
 $$("button[data-download]").forEach((b) => b.addEventListener("click", () => downloadFile(b.dataset.download)));
 
-const initial = location.hash.slice(1);
-showTab($(`[data-tab="${initial}"]`) ? initial : "raob");
+// ---- Shareable links and saved settings -------------------------------------------
+// A sounding's request lives in the address (?source=raob&site=OAX&date=…&hour=12), so copying
+// the URL reproduces it. Figure settings are added only where they differ from the defaults.
+// The settings you change are also remembered in this browser for your next visit.
+
+const REQUEST_KEYS = ["site", "profile", "model", "fcst_hr", "lat", "lon", "date", "hour"];
+const SAVED_SETTINGS = "sounderpy-settings";
+
+// Settings fields that differ from their defaults, as [name, value] pairs.
+function changedSettings() {
+  const changed = [];
+  for (const el of settingsForm.elements) {
+    if (!el.name) continue;
+    if (el.type === "checkbox") {
+      if (el.checked !== el.defaultChecked) changed.push([el.name, el.checked ? "1" : "0"]);
+    } else if (el.tagName === "SELECT") {
+      const initial = [...el.options].find((o) => o.defaultSelected) ?? el.options[0];
+      if (el.value !== initial.value) changed.push([el.name, el.value]);
+    } else if (el.value !== el.defaultValue) {
+      changed.push([el.name, el.value]);
+    }
+  }
+  return changed;
+}
+
+function applySettings(pairs) {
+  settingsForm.reset();
+  for (const [name, value] of pairs) {
+    const el = settingsForm.elements.namedItem(name);
+    if (!el) continue;
+    if (el.type === "checkbox") el.checked = value === "1";
+    else el.value = value;
+  }
+  updateSettingsCount();
+}
+
+function saveSettings() {
+  try {
+    const changed = changedSettings();
+    if (changed.length) localStorage.setItem(SAVED_SETTINGS, JSON.stringify(changed));
+    else localStorage.removeItem(SAVED_SETTINGS);
+  } catch { /* private mode or storage blocked: settings just aren't remembered */ }
+}
+
+function savedSettings() {
+  try { return JSON.parse(localStorage.getItem(SAVED_SETTINGS)) ?? []; } catch { return []; }
+}
+
+function requestUrl(req) {
+  const params = new URLSearchParams({ source: req.source });
+  for (const key of REQUEST_KEYS) if (req[key] != null && req[key] !== "") params.set(key, req[key]);
+  for (const [name, value] of changedSettings()) params.set(name, value);
+  return `${location.pathname}?${params}`;
+}
+
+function requestFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const source = params.get("source");
+  if (!$(`[data-tab="${source}"]`)) return null;
+  const req = { source };
+  for (const key of REQUEST_KEYS) if (params.get(key)) req[key] = params.get(key);
+  if (req.fcst_hr != null) req.fcst_hr = Number(req.fcst_hr);
+  if (req.lat != null) { req.lat = Number(req.lat); req.lon = Number(req.lon); }
+  const settings = [...params].filter(([name]) => settingsForm.elements.namedItem(name));
+  return { req, settings };
+}
+
+// Put a shared request back into its form, so it can be tweaked and re-run.
+function fillForm(req) {
+  const form = $(`.spy-panel[data-source="${req.source}"]`);
+  const field = (name) => form.elements.namedItem(name);
+  if (req.source === "reanalysis") {
+    field("coords").value = `${req.lat}, ${req.lon}`;
+    field("coords").dispatchEvent(new Event("change"));
+  } else if (req.source === "acars") {
+    const profile = { id: req.profile, hour: req.hour, code: String(req.profile).slice(0, 3) };
+    field("profile").replaceChildren(new Option(`${req.profile} (${req.hour}Z)`, JSON.stringify(profile), true, true));
+  }
+  for (const key of ["site", "model", "fcst_hr", "date", "hour"]) {
+    if (!field(key) || (req.source === "acars" && key === "hour")) continue; // ACARS: the profile carries the hour
+    field(key).value = req[key] ?? ""; // e.g. clears a BUFKIT run date for a "latest run" link
+  }
+  field("site")?.dispatchEvent(new Event("input")); // highlights it on the map
+}
+
+// Opens the sounding described by the current URL; returns false if there isn't one.
+function openFromUrl() {
+  const shared = requestFromUrl();
+  if (!shared) return false;
+  showTab(shared.req.source, { keepUrl: true });
+  applySettings(shared.settings);
+  fillForm(shared.req);
+  runSounding({ ...shared.req, settings: readSettings() });
+  return true;
+}
+
+window.addEventListener("popstate", () => {
+  if (openFromUrl()) return;
+  const tab = location.hash.slice(1);
+  showTab($(`[data-tab="${tab}"]`) ? tab : currentTab, { keepUrl: true });
+  clearResult();
+});
+
+$("[data-copy-link]").addEventListener("click", async (e) => {
+  const button = e.currentTarget, label = $("span", button);
+  if (!lastShareUrl) return;
+  try {
+    await navigator.clipboard.writeText(new URL(lastShareUrl, location.origin).href);
+    label.textContent = "Link copied!";
+  } catch {
+    label.textContent = "Copy it from the address bar";
+  }
+  setTimeout(() => { label.textContent = "Copy link"; }, 2000);
+});
+
+if (!openFromUrl()) {
+  applySettings(savedSettings());
+  const tab = location.hash.slice(1);
+  showTab($(`[data-tab="${tab}"]`) ? tab : "raob");
+}
 loadLatestRuns();
 
 // ---- Status bar: server health and UTC clock ----------------------------------

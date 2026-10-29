@@ -1,0 +1,9 @@
+[Unit]
+Description=Report SounderPy API health to Healthchecks.io
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/sounderpy-healthcheck.env
+ExecStart=/root/sounderpy-webapp/server/healthcheck.sh

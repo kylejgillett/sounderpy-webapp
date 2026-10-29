@@ -131,7 +131,10 @@
 .spy-result { display: grid; gap: 1rem; margin-top: .5rem; scroll-margin-top: 1.5rem; }
 
 /* Caption */
-.spy-caption { display: grid; gap: .45rem; padding-bottom: .9rem; border-bottom: 1px solid var(--line); }
+.spy-caption { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: .75rem 1.25rem; padding-bottom: .9rem; border-bottom: 1px solid var(--line); }
+.spy-caption-text { display: grid; gap: .45rem; min-width: 0; }
+.spy-share { gap: .45rem; min-height: 2.75rem; padding: .4rem .9rem; font-size: .9rem; white-space: nowrap; }
+.spy-share svg { width: 1.1rem; height: 1.1rem; fill: none; stroke: var(--ochre); stroke-width: 2; stroke-linecap: round; }
 .spy-kicker { margin: 0; color: var(--ochre); font-size: .82rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; white-space: pre-wrap; }
 .spy-title { margin: 0; color: var(--forest-deep); font-family: var(--serif); font-size: clamp(1.5rem, 3vw, 2.1rem); font-weight: 600; line-height: 1.2; white-space: pre-wrap; }
 /* One quiet line: "Valid 10:00 UTC Thu, Oct 29, 2026 · Run 10Z Oct 29, F00 · At 47.95°N…" */
@@ -225,6 +228,7 @@
   .spy-panel, .spy-settings { padding: 1rem; }
   .spy-map { min-height: 320px; }
   .spy-meta { flex-direction: column; }
+  .spy-caption { grid-template-columns: 1fr; }
   .spy-downloads { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .spy-meta span + span::before { content: none; }
   .spy-result .spy-frame { aspect-ratio: auto !important; min-height: 18rem; }

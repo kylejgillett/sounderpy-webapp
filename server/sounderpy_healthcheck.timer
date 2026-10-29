@@ -1,0 +1,11 @@
+[Unit]
+Description=Check SounderPy API health every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+# Keep checking even after an occasional missed run (e.g. a reboot).
+Persistent=true
+
+[Install]
+WantedBy=timers.target

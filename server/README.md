@@ -87,6 +87,27 @@ curl https://api.sounderpy.app/api/health
 
 Logs: `journalctl -u sounderpy_api -f`
 
+**5. Downtime alerts with Healthchecks.io.** Every 5 minutes a timer checks the public health
+URL, which covers the API, Caddy, the certificate, and DNS. Each check reports to Healthchecks.io,
+which emails you when checks fail or stop arriving.
+
+1. In Healthchecks.io, add a check named `sounderpy-api` with **Period 5 minutes** and
+   **Grace 10 minutes**, and copy its ping URL (`https://hc-ping.com/…`).
+2. Save the ping URL on the droplet. It stays out of the repo, and anyone with it can mark the check up or down.
+   ```bash
+   echo 'HC_PING_URL=https://hc-ping.com/your-uuid' > /etc/sounderpy-healthcheck.env
+   chmod 600 /etc/sounderpy-healthcheck.env
+   ```
+3. Install and start the timer, then run it once by hand:
+   ```bash
+   cp server/sounderpy_healthcheck.service server/sounderpy_healthcheck.timer /etc/systemd/system/
+   systemctl daemon-reload
+   systemctl enable --now sounderpy_healthcheck.timer
+   systemctl start sounderpy_healthcheck.service && journalctl -u sounderpy_healthcheck -n 5
+   ```
+   Healthchecks.io should now show the check as up. `systemctl list-timers sounderpy_healthcheck`
+   shows when the next check runs.
+
 ## Update after a change
 
 ```bash
