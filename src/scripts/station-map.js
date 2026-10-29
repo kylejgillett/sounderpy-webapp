@@ -6,16 +6,17 @@ import { feature, mesh } from "topojson-client";
 import "leaflet/dist/leaflet.css";
 import "../styles/station-map.css";
 
-// Basemap drawn from Natural Earth data (public domain) in the site's palette,
-// so there are no tile servers or API keys involved.
-const OCEAN = "#24221f";
+// Basemap drawn from Natural Earth data (public domain), so there are no tile servers or
+// API keys involved. A cool slate "chart" palette sets the map apart from the warm page;
+// station dots and highways stay warm so they stand out on it.
+const OCEAN = "#1d252b";
 const BASE = {
-  land: { stroke: true, color: "#9a8a6c", weight: 0.9, fillColor: "#413c35", fillOpacity: 1 },
-  lakes: { stroke: true, color: "#6d6250", weight: 0.6, fillColor: OCEAN, fillOpacity: 1 },
-  highways: { color: "#8c6f57", weight: 1, opacity: 0.75 },
-  countries: { color: "#b9a37a", weight: 1.1, opacity: 0.95 },
-  states: { color: "#7a6e5a", weight: 0.7, opacity: 0.95 },
-  graticule: { color: "#35322d", weight: 1, dashArray: "2 4" },
+  land: { stroke: true, color: "#7f97a3", weight: 0.9, fillColor: "#323a3f", fillOpacity: 1 },
+  lakes: { stroke: true, color: "#5d7480", weight: 0.6, fillColor: OCEAN, fillOpacity: 1 },
+  highways: { color: "#b08d62", weight: 1, opacity: 0.7 },
+  countries: { color: "#a9b9c1", weight: 1.1, opacity: 0.95 },
+  states: { color: "#5e6c73", weight: 0.7, opacity: 0.95 },
+  graticule: { color: "#283239", weight: 1, dashArray: "2 4" },
 };
 const HIGHWAY_MIN_ZOOM = 5;
 const MAX_PLACE_LABELS = 120;
@@ -108,6 +109,8 @@ export function createBaseMap(el, { center = [39, -96], zoom = 4 } = {}) {
   });
   map.attributionControl.addAttribution('Map data: <a href="https://www.naturalearthdata.com/">Natural Earth</a>');
   drawBasemap(map).catch((err) => console.error("Basemap failed to load", err));
+  // The map stretches to its column's height, which changes as the form beside it grows.
+  new ResizeObserver(() => map.invalidateSize()).observe(el);
   return map;
 }
 

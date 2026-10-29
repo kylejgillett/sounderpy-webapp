@@ -1,12 +1,14 @@
 /* Leaflet builds its own DOM, so these styles are global rather than page-scoped. */
-.leaflet-container { background: #24221f; font: inherit; }
-.leaflet-control-attribution { background: rgb(38 36 34 / 80%) !important; color: #b9a98a; }
-.leaflet-control-attribution a { color: #d4c49a; }
-.leaflet-bar a { background: #45413a; border-color: #786d59; color: #f6ebd2; }
-.leaflet-bar a:hover { background: #625c51; color: #f6ebd2; }
+/* Map chrome matches the map's cool slate palette (popups keep the site's warm look). */
+.leaflet-container { background: #1d252b; font: inherit; }
+.leaflet-control-attribution { background: rgb(29 37 43 / 85%) !important; color: #9fb1ba; }
+.leaflet-control-attribution a { color: #c9d6dc; }
+.leaflet-bar { border-color: #5d6f78 !important; }
+.leaflet-bar a { background: #2b353b; border-color: #5d6f78; color: #e3eaee; }
+.leaflet-bar a:hover { background: #3a464d; color: #fff; }
 
-.leaflet-tooltip { border: 1px solid #786d59; background: #45413a; color: #f6ebd2; box-shadow: none; font-size: .95rem; }
-.leaflet-tooltip-top::before { border-top-color: #786d59; }
+.leaflet-tooltip { border: 1px solid #5d6f78; background: #2b353b; color: #e3eaee; box-shadow: none; font-size: .95rem; }
+.leaflet-tooltip-top::before { border-top-color: #5d6f78; }
 
 .spy-popup .leaflet-popup-content-wrapper,
 .spy-popup .leaflet-popup-tip { border: 1px solid #a6926d; background: #45413a; color: #f6ebd2; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
@@ -23,10 +25,10 @@
 .spy-place { width: 0; height: 0; }
 .spy-place span {
   position: absolute; left: -2px; top: -2px; display: flex; align-items: center; gap: 4px; white-space: nowrap;
-  color: #cbbd9e; font-size: 11px; font-weight: 600; letter-spacing: .02em;
-  text-shadow: 0 0 3px #24221f, 0 0 3px #24221f, 0 0 2px #24221f;
+  color: #c3d0d6; font-size: 11px; font-weight: 600; letter-spacing: .02em;
+  text-shadow: 0 0 3px #1d252b, 0 0 3px #1d252b, 0 0 2px #1d252b;
 }
-.spy-place span::before { content: ""; flex: none; width: 4px; height: 4px; border-radius: 50%; background: #9a8a6c; }
+.spy-place span::before { content: ""; flex: none; width: 4px; height: 4px; border-radius: 50%; background: #7f97a3; }
 .spy-popup-busy { animation: spy-pulse 1.2s ease-in-out infinite; }
 @keyframes spy-pulse { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .spy-popup-busy { animation: none; } }

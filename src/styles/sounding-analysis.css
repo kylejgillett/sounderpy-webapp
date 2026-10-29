@@ -31,7 +31,20 @@
 }
 .spy-panel[hidden] { display: none; }
 .spy-hint { margin: 0; color: var(--ink-soft); line-height: 1.5; }
-.spy-map { z-index: 0; width: 100%; height: 420px; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 6px; background: #24221f; }
+
+/* Request panel: map on the left, details on the right (stacked on narrow screens) */
+.spy-panel { grid-template-columns: minmax(0, 1.65fr) minmax(300px, 1fr); gap: 1.4rem; }
+.spy-side { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+.spy-side .spy-fields { grid-template-columns: 1fr 1fr; gap: .85rem; }
+.spy-side .spy-fields > :first-child { grid-column: 1 / -1; }
+.spy-side .spy-submit { margin-top: auto; }
+
+/* The map fills its column's height; its own look lives in station-map.css */
+.spy-map {
+  position: relative; z-index: 0; width: 100%; min-height: 440px; overflow: hidden;
+  border: 1px solid #5d6f78; border-radius: 10px; background: #1d252b;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 35%), 0 10px 26px rgb(0 0 0 / 30%);
+}
 .spy-map.is-error { display: grid; place-items: center; color: var(--ink-soft); }
 
 .spy-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
@@ -176,11 +189,16 @@
 
 .spy-footer { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; margin-top: 3rem; padding-top: 1.25rem; border-top: 1px solid var(--line); font-size: .95rem; }
 
+@media (max-width: 820px) {
+  .spy-panel { grid-template-columns: 1fr; }
+  .spy-map { min-height: 360px; }
+}
+
 @media (max-width: 640px) {
   .spy-tabs button { flex: 1 1 45%; border-radius: 6px; border: 1px solid var(--line); }
   .spy-tabs { border-bottom: 0; }
   .spy-panel, .spy-settings { padding: 1rem; }
-  .spy-map { height: 320px; }
+  .spy-map { min-height: 320px; }
   .spy-meta { flex-direction: column; }
   .spy-downloads { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .spy-meta span + span::before { content: none; }

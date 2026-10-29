@@ -1,66 +1,75 @@
 ---
 // The four request forms (one per data source); SourceTabs switches between them.
+// Each is two columns: the map on the left, the request details on the right.
 ---
 <form class="spy-panel" data-source="raob">
-  <p class="spy-hint">Click a station on the map, or type its ID below.</p>
   <div class="spy-map" role="region" aria-label="RAOB station map"></div>
-  <div class="spy-fields">
-    <label>Site ID<input name="site" required placeholder="e.g. OAX" autocomplete="off" /></label>
-    <label>Launch date (UTC)<input name="date" type="date" required /></label>
-    <label>Launch hour (UTC)<input name="hour" required inputmode="numeric" placeholder="00 or 12" /></label>
+  <div class="spy-side">
+    <p class="spy-hint">Click a station on the map, or type its ID.</p>
+    <div class="spy-fields">
+      <label>Site ID<input name="site" required placeholder="e.g. OAX" autocomplete="off" /></label>
+      <label>Launch date (UTC)<input name="date" type="date" required /></label>
+      <label>Launch hour (UTC)<input name="hour" required inputmode="numeric" placeholder="00 or 12" /></label>
+    </div>
+    <button class="spy-submit" type="submit"><span>Get sounding</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m0 0-5-5m5 5-5 5" /></svg></button>
   </div>
-  <button class="spy-submit" type="submit"><span>Get sounding</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m0 0-5-5m5 5-5 5" /></svg></button>
 </form>
 
 <form class="spy-panel" data-source="acars" hidden>
-  <p class="spy-hint">Click an airport on the map to see its flights for that day, then pick a time. Or search by airport or hour below and choose a profile from the list.</p>
   <div class="spy-map" role="region" aria-label="ACARS airport map"></div>
+  <div class="spy-side">
+    <p class="spy-hint">Click an airport on the map to see its flights for that day, then pick a time. Or search by airport or hour and choose a profile from the list.</p>
 
-  <div class="spy-step">
-    <h3>1. Find flights</h3>
-    <div class="spy-radios" role="radiogroup" aria-label="Search by">
-      <span>Search by</span>
-      <label><input type="radio" name="search" value="airport" checked /><span>Airport <small>all day</small></span></label>
-      <label><input type="radio" name="search" value="hour" /><span>Hour <small>all airports</small></span></label>
+    <div class="spy-step">
+      <h3>1. Find flights</h3>
+      <div class="spy-radios" role="radiogroup" aria-label="Search by">
+        <span>Search by</span>
+        <label><input type="radio" name="search" value="airport" checked /><span>Airport <small>all day</small></span></label>
+        <label><input type="radio" name="search" value="hour" /><span>Hour <small>all airports</small></span></label>
+      </div>
+      <div class="spy-fields spy-search-row">
+        <label>Flight date (UTC)<input name="date" type="date" required /></label>
+        <label data-search="airport">Airport code<input name="airport" placeholder="e.g. DEN" autocomplete="off" /></label>
+        <label data-search="hour" hidden>Flight hour (UTC)<input name="hour" inputmode="numeric" placeholder="e.g. 18" /></label>
+        <button class="spy-secondary" type="button" data-action="find-profiles">Find flights</button>
+      </div>
     </div>
-    <div class="spy-fields spy-search-row">
-      <label>Flight date (UTC)<input name="date" type="date" required /></label>
-      <label data-search="airport">Airport code<input name="airport" placeholder="e.g. DEN" autocomplete="off" /></label>
-      <label data-search="hour" hidden>Flight hour (UTC)<input name="hour" inputmode="numeric" placeholder="e.g. 18" /></label>
-      <button class="spy-secondary" type="button" data-action="find-profiles">Find flights</button>
-    </div>
-  </div>
 
-  <div class="spy-step">
-    <h3>2. Choose a profile</h3>
-    <select name="profile" required aria-label="Profile"><option value="">Find flights first</option></select>
-    <p class="spy-step-note">Or click a highlighted airport on the map and pick a time.</p>
+    <div class="spy-step">
+      <h3>2. Choose a profile</h3>
+      <select name="profile" required aria-label="Profile"><option value="">Find flights first</option></select>
+      <p class="spy-step-note">Or click a highlighted airport on the map and pick a time.</p>
+    </div>
+    <button class="spy-submit" type="submit"><span>Get sounding</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m0 0-5-5m5 5-5 5" /></svg></button>
   </div>
-  <button class="spy-submit" type="submit"><span>Get sounding</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m0 0-5-5m5 5-5 5" /></svg></button>
 </form>
 
 <form class="spy-panel" data-source="bufkit" hidden>
-  <p class="spy-hint">Click a station on the map, or type its ID below. Leave the run date and hour blank for the latest run.</p>
   <div class="spy-map" role="region" aria-label="BUFKIT station map"></div>
-  <div class="spy-fields">
-    <label>Site ID<input name="site" required placeholder="e.g. KMOP" autocomplete="off" /></label>
-    <label>Model<select name="model" required>
-      {["gfs", "nam", "namnest", "rap", "hrrr", "sref", "hiresw"].map((m) => <option value={m} selected={m === "hrrr"}>{m.toUpperCase()}</option>)}
-    </select></label>
-    <label>Forecast hour<input name="fcst_hr" type="number" min="0" required value="1" placeholder="hours after run" /></label>
-    <label>Run date (UTC)<input name="date" type="date" /></label>
-    <label>Run hour (UTC)<input name="hour" inputmode="numeric" placeholder="latest" /></label>
+  <div class="spy-side">
+    <p class="spy-hint">Click a station on the map, or type its ID. Leave the run date and hour blank for the latest run.</p>
+    <div class="spy-fields">
+      <label>Site ID<input name="site" required placeholder="e.g. KMOP" autocomplete="off" /></label>
+      <label>Model<select name="model" required>
+        {["gfs", "nam", "namnest", "rap", "hrrr", "sref", "hiresw"].map((m) => <option value={m} selected={m === "hrrr"}>{m.toUpperCase()}</option>)}
+      </select></label>
+      <label>Forecast hour<input name="fcst_hr" type="number" min="0" required value="1" placeholder="hours after run" /></label>
+      <label>Run date (UTC)<input name="date" type="date" /></label>
+      <label>Run hour (UTC)<input name="hour" inputmode="numeric" placeholder="latest" /></label>
+    </div>
+    <button class="spy-submit" type="submit"><span>Get sounding</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m0 0-5-5m5 5-5 5" /></svg></button>
   </div>
-  <button class="spy-submit" type="submit"><span>Get sounding</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m0 0-5-5m5 5-5 5" /></svg></button>
 </form>
 
 <form class="spy-panel" data-source="reanalysis" hidden>
-  <p class="spy-hint">RAP/RUC reanalysis from NCEI and AWS. Expect occasional outages and delays. Click anywhere on the map to set the point.</p>
   <div class="spy-map" role="region" aria-label="Reanalysis point map"></div>
-  <div class="spy-fields">
-    <label>Coordinates<input name="coords" required placeholder="lat, lon (e.g. 45.6, -86.7)" autocomplete="off" /></label>
-    <label>Date (UTC)<input name="date" type="date" required value="2024-08-28" /></label>
-    <label>Hour (UTC)<input name="hour" required inputmode="numeric" value="23" placeholder="e.g. 18" /></label>
+  <div class="spy-side">
+    <p class="spy-hint">RAP/RUC reanalysis from NCEI and AWS. Expect occasional outages and delays. Click anywhere on the map to set the point.</p>
+    <div class="spy-fields">
+      <label>Coordinates<input name="coords" required placeholder="lat, lon (e.g. 45.6, -86.7)" autocomplete="off" /></label>
+      <label>Date (UTC)<input name="date" type="date" required value="2024-08-28" /></label>
+      <label>Hour (UTC)<input name="hour" required inputmode="numeric" value="23" placeholder="e.g. 18" /></label>
+    </div>
+    <button class="spy-submit" type="submit"><span>Get sounding</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m0 0-5-5m5 5-5 5" /></svg></button>
   </div>
-  <button class="spy-submit" type="submit"><span>Get sounding</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m0 0-5-5m5 5-5 5" /></svg></button>
 </form>
