@@ -1,0 +1,11 @@
+---
+// Popup for errors; sounding-app.js fills in the title and message and opens it.
+---
+<dialog class="spy-dialog" aria-labelledby="spy-dialog-title" aria-describedby="spy-dialog-message">
+  <form method="dialog">
+    <svg class="spy-dialog-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20L12 3z" /><path d="M12 10v4M12 17h.01" /></svg>
+    <h2 id="spy-dialog-title">Something went wrong</h2>
+    <p id="spy-dialog-message"></p>
+    <button class="spy-secondary" value="close" autofocus>OK</button>
+  </form>
+</dialog>

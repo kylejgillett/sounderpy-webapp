@@ -187,6 +187,21 @@
 .spy-download span { display: grid; font-size: 1.05rem; font-weight: 700; line-height: 1.2; text-align: left; }
 .spy-download small { color: var(--ink-soft); font-size: .8rem; font-weight: 500; }
 
+/* Error popup (native <dialog>: centred, Esc to close, focus stays inside) */
+.spy-dialog {
+  width: min(30rem, calc(100% - 2rem)); padding: 0; border: 1px solid var(--line-strong); border-radius: 10px;
+  background: var(--paper-light); color: var(--ink); box-shadow: 0 18px 50px rgb(0 0 0 / 45%);
+}
+.spy-dialog::backdrop { background: rgb(20 18 15 / 62%); backdrop-filter: blur(2px); }
+.spy-dialog form { display: grid; justify-items: start; gap: .7rem; padding: 1.5rem 1.6rem 1.4rem; }
+.spy-dialog-icon { width: 2.2rem; height: 2.2rem; fill: none; stroke: #f0a58a; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.spy-dialog h2 { margin: 0; color: var(--forest-deep); font-family: var(--serif); font-size: 1.45rem; font-weight: 600; }
+.spy-dialog p { margin: 0; color: var(--ink-soft); font-size: 1rem; line-height: 1.6; }
+.spy-dialog button { justify-self: end; min-width: 6rem; margin-top: .4rem; }
+.spy-dialog[open] { animation: spy-pop .16s ease-out; }
+@keyframes spy-pop { from { opacity: 0; transform: translateY(6px) scale(.98); } }
+@media (prefers-reduced-motion: reduce) { .spy-dialog[open] { animation: none; } }
+
 /* Footer under the sounding: about / cite / help */
 .spy-footer {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem 2.25rem;

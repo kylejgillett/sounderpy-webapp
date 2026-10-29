@@ -32,12 +32,23 @@ function setBusy(busy, message = "") {
   status.classList.remove("is-error");
 }
 
-function showError(err) {
+// Errors open a popup with a title saying what failed and a message saying what to do.
+const dialog = $(".spy-dialog");
+dialog.addEventListener("click", (e) => { if (e.target === dialog) dialog.close(); }); // click the backdrop to close
+
+function showError(err, title = "Something went wrong") {
   setBusy(false);
-  status.textContent = err instanceof TypeError
-    ? "Could not reach the sounding server. Please try again in a moment."
+  const message = err instanceof TypeError
+    ? "Couldn't reach the sounding server. Check your connection, or try again in a moment."
     : err.message;
-  status.classList.add("is-error");
+  if (typeof dialog.showModal !== "function") {
+    status.textContent = message;
+    status.classList.add("is-error");
+    return;
+  }
+  $("#spy-dialog-title").textContent = title;
+  $("#spy-dialog-message").textContent = message;
+  if (!dialog.open) dialog.showModal();
 }
 
 // ---- Form values ------------------------------------------------------------
@@ -229,7 +240,7 @@ function clearResult() {
 
 async function getSounding(form) {
   let req;
-  try { req = buildRequest(form); } catch (err) { return showError(err); }
+  try { req = buildRequest(form); } catch (err) { return showError(err, "Check your request"); }
 
   const id = ++requestId;
   setBusy(true);
@@ -250,7 +261,7 @@ async function getSounding(form) {
   } catch (err) {
     if (id !== requestId) return;
     stopLoading();
-    showError(err);
+    showError(err, "Couldn't get that sounding");
   }
 }
 
@@ -265,7 +276,7 @@ async function downloadFile(output) {
     URL.revokeObjectURL(url);
     setBusy(false);
   } catch (err) {
-    showError(err);
+    showError(err, "Couldn't prepare that file");
   }
 }
 
@@ -279,9 +290,10 @@ function setSearchMode(form, mode) {
 async function findProfiles(form, { focus } = {}) {
   const byAirport = form.search.value === "airport";
   const date = form.date.value, airport = form.airport.value.trim().toUpperCase(), hour = parseHour(form.hour.value);
-  if (!date) return showError(new Error("Choose a flight date first."));
-  if (byAirport && !airport) return showError(new Error("Enter an airport code, or click an airport on the map."));
-  if (!byAirport && !hour) return showError(new Error(HOUR_MESSAGE));
+  const searchError = (message) => showError(new Error(message), "Check your flight search");
+  if (!date) return searchError("Choose a flight date first.");
+  if (byAirport && !airport) return searchError("Enter an airport code, or click an airport on the map.");
+  if (!byAirport && !hour) return searchError(HOUR_MESSAGE);
 
   const params = new URLSearchParams({ date });
   byAirport ? params.set("airport", airport) : params.set("hour", hour);
@@ -297,7 +309,7 @@ async function findProfiles(form, { focus } = {}) {
     maps.acars?.airports?.show(profiles, { focus });
     setBusy(false);
   } catch (err) {
-    showError(err);
+    showError(err, "Couldn't find flights");
   }
 }
 
