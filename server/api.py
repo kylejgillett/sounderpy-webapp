@@ -9,6 +9,7 @@ import base64
 import io
 import logging
 import os
+import re
 import threading
 import time
 import datetime as dt
@@ -221,6 +222,62 @@ def _sounding_info(clean_data, source):
     }
 
 
+# Who serves each data source, for "isn't responding" messages.
+PROVIDERS = {
+    "raob": "The University of Wyoming upper-air archive",
+    "acars": "The OU SHARP aircraft-data archive",
+    "bufkit": "The BUFKIT data server",
+    "reanalysis": "NOAA NCEI's reanalysis archive",
+}
+
+
+def _when(req):
+    """'12Z on Oct 29, 2026', or '' when there's no date/hour."""
+    if not req.date or req.hour in (None, ""):
+        return ""
+    return f"{_hour(req.hour)}Z on {req.date:%b} {req.date.day}, {req.date.year}"
+
+
+def _friendly_error(req, exc):
+    """Turn a SounderPy or data-source failure into a message a user can act on."""
+    text = " ".join(str(exc).split())
+    lower = text.lower()
+    when = _when(req)
+
+    unreachable = isinstance(exc, (requests.Timeout, requests.ConnectionError)) or any(
+        phrase in lower for phrase in ("could not be reached", "temporarily unavailable", "currently returning http"))
+    if unreachable:
+        return f"{PROVIDERS[req.source]} isn't responding right now. This is usually temporary, so please try again in a few minutes."
+
+    if req.source == "raob":
+        site = req.site.strip().upper()
+        if "not found" in lower:
+            return f"“{site}” isn't a known upper-air station. Click a station on the map, or use its ID (e.g. OAX, KOAX, or WMO 72558)."
+        return (f"No observed sounding for {site} at {when}. Most stations launch only at 00Z and 12Z, new soundings "
+                "can take an hour or two to appear, and the University of Wyoming archive is occasionally down.")
+
+    if req.source == "bufkit":
+        site, model = req.site.strip().upper(), req.model.upper()
+        if "valid bufkit site" in lower:
+            return f"“{site}” isn't a BUFKIT site. Click a station on the map to pick one."
+        if "invalid forecast hour" in lower:
+            limit = re.search(r"up to F0*(\d+)", text)
+            return f"Forecast hour {req.fcst_hr} is beyond the {model}'s range" + (f" (up to F{int(limit.group(1)):02d})." if limit else ".")
+        if "not a valid model" in lower:
+            return f"The {model} isn't available for past runs. Try the GFS, NAM, NAMNEST, RAP, or HRRR, or leave the run blank for the latest."
+        run = f"the {when} run" if when else "the latest run"
+        return (f"No {model} forecast for {site} at F{int(req.fcst_hr):02d} from {run}. Try another forecast hour, model, "
+                "or run; past runs are only archived for some models and dates.")
+
+    if req.source == "acars":
+        if "does not exist" in lower or "invalid profile" in lower:
+            return f"Flight profile {req.profile} isn't available for {when}. Search for flights again and pick one from the list."
+        return f"Flight profile {req.profile} couldn't be loaded. It may be incomplete; try another flight or time."
+
+    return (f"No RAP/RUC reanalysis for {req.lat:.2f}, {req.lon:.2f} at {when}. The point must be over North America, "
+            "and NOAA NCEI's archive has gaps for some dates, so try a nearby hour or date.")
+
+
 def _load_data(req):
     """Fetch SounderPy data for a request. Returns (clean_data, label)."""
     if req.source == "raob":
@@ -421,13 +478,10 @@ def sounding(req: SoundingRequest):
         clean_data, label = _load_data(req)
     except HTTPException:
         raise
-    except Exception as exc:
+    # SounderPy calls sys.exit() for some bad inputs (e.g. a missing ACARS profile), so catch SystemExit too.
+    except (Exception, SystemExit) as exc:
         LOGGER.exception("Data retrieval failed for %s", req.model_dump(exclude={"settings"}))
-        raise HTTPException(
-            502,
-            f"No data could be retrieved for this request ({type(exc).__name__}). "
-            "Check the site, date, and hour, then try again.",
-        )
+        raise HTTPException(502, _friendly_error(req, exc))
 
     try:
         if req.output != "png":
@@ -439,9 +493,13 @@ def sounding(req: SoundingRequest):
             )
 
         png = _render_png(clean_data, req.settings)
-    except Exception as exc:
+    except (Exception, SystemExit):
         LOGGER.exception("Rendering failed for %s", req.model_dump())
-        raise HTTPException(500, f"The plot could not be generated ({type(exc).__name__}).")
+        raise HTTPException(
+            500,
+            "The data loaded, but SounderPy couldn't draw this plot. That can happen with very short or "
+            "incomplete profiles. Try turning off ECAPE, radar, or surface edits, or pick another time.",
+        )
 
     LOGGER.info("%s %s served in %.1fs", req.source, req.output, time.time() - started)
     return {
