@@ -1,0 +1,21 @@
+[Unit]
+Description=SounderPy Sounding Analysis HTTP API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+WorkingDirectory=/root/sounderpy-webapp/server
+
+# One worker: plotting is serialized anyway, and it keeps memory low on a 2 GB droplet.
+ExecStart=/root/sounderpy-webapp/server/venv/bin/uvicorn api:app --host 127.0.0.1 --port 8000 --workers 1 --proxy-headers
+
+Restart=always
+RestartSec=10
+
+# Make Python logging immediately visible in journalctl
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

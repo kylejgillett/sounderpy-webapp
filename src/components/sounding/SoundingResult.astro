@@ -1,0 +1,50 @@
+---
+// Status line, caption, plot frame (empty / loading / ready), and downloads.
+const downloads = [
+  { type: "png", label: "PNG", note: "plot image" },
+  { type: "csv", label: "CSV", note: "profile data" },
+  { type: "sharppy", label: "SHARPpy", note: "input file" },
+  { type: "cm1", label: "CM1", note: "input sounding" },
+];
+---
+<p class="spy-status" role="status" aria-live="polite"></p>
+
+<section class="spy-result" data-state="empty" aria-busy="false">
+  <header class="spy-caption" hidden>
+    <p class="spy-kicker"></p>
+    <h2 class="spy-title"></h2>
+    <p class="spy-meta"></p>
+  </header>
+
+  <div class="spy-frame">
+    <div class="spy-placeholder">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M8 56h48M8 56V8" /><path class="spy-trace-t" d="M40 56c-2-8 2-14-2-22s4-14 0-26" /><path class="spy-trace-td" d="M26 56c2-10-4-16 0-24s-6-14-2-24" /></svg>
+      <p>Your sounding will appear here</p>
+      <span>Pick a data source, fill in the details, and press <strong>Get sounding</strong>.</span>
+    </div>
+
+    <div class="spy-loading" role="status" aria-live="polite">
+      <div class="spy-loading-card">
+        <p class="spy-loading-title">Building your sounding</p>
+        <p class="spy-loading-request"></p>
+        <ul class="spy-loading-settings"></ul>
+        <div class="spy-progress" aria-hidden="true"><span></span></div>
+        <p class="spy-loading-meta"><span class="spy-elapsed">0:00</span><span class="spy-loading-hint"></span></p>
+      </div>
+    </div>
+
+    <a class="spy-image-link" target="_blank" rel="noopener" title="Open full size"><img alt="" /></a>
+  </div>
+
+  <div class="spy-downloads" aria-label="Download this sounding">
+    {downloads.map(({ type, label, note }) => {
+      const Tag = type === "png" ? "a" : "button";
+      return (
+        <Tag class="spy-download" data-download={type} {...(type === "png" ? { download: "sounderpy_plot.png" } : { type: "button" })}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19.5h14" /></svg>
+          <span>{label}<small>{note}</small></span>
+        </Tag>
+      );
+    })}
+  </div>
+</section>

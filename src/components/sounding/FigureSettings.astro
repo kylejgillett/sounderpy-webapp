@@ -1,0 +1,51 @@
+---
+// Optional figure customization, read by readSettings() in sounding-app.js.
+---
+<details class="spy-settings" id="settings">
+  <summary>
+    <svg class="spy-settings-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10m4 0h2M4 12h4m4 0h8M4 18h12m4 0h0" /><circle cx="16" cy="6" r="2" /><circle cx="10" cy="12" r="2" /><circle cx="18" cy="18" r="2" /></svg>
+    <span class="spy-settings-text">
+      <span class="spy-settings-title">Customize figure <em>optional</em></span>
+      <span class="spy-settings-sub">Dark mode, ECAPE, radar map, storm motion, surface edits and more</span>
+    </span>
+    <span class="spy-settings-count" hidden></span>
+    <svg class="spy-settings-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+  </summary>
+
+  <form class="spy-settings-form">
+    <div class="spy-settings-grid">
+      <fieldset>
+        <legend>Appearance</legend>
+        <label class="spy-check"><input type="checkbox" name="dark_mode" />Dark mode</label>
+        <label class="spy-check"><input type="checkbox" name="color_blind" checked />Color-blind friendly</label>
+        <label class="spy-check"><input type="checkbox" name="ecape" />Add ECAPE parcel path (slower)</label>
+        <label class="spy-check"><input type="checkbox" name="hodo" />Plot hodograph only</label>
+        <label>Hodograph boundary angle<input name="hodo_boundary_angle" type="number" placeholder="degrees, e.g. 45" /></label>
+      </fieldset>
+      <fieldset>
+        <legend>Map &amp; radar</legend>
+        <label>Map zoom (0 hides the map)<input name="map_zoom" type="number" min="0" value="2" /></label>
+        <label>Radar<select name="radar"><option value="">None</option><option>single-site</option><option>mosaic</option></select></label>
+        <label>Radar time (UTC)<input name="radar_time" type="datetime-local" title="Leave blank to use the sounding time" /></label>
+      </fieldset>
+      <fieldset>
+        <legend>Storm motion &amp; surface</legend>
+        <label>Storm motion<select name="storm_motion"><option value="right_moving">Right mover</option><option value="left_moving">Left mover</option><option value="mean_wind">Mean wind</option></select></label>
+        <div class="spy-pair">
+          <label>Custom direction<input name="sm_dir" type="number" placeholder="deg" /></label>
+          <label>Custom speed<input name="sm_spd" type="number" placeholder="kts" /></label>
+        </div>
+        <span class="spy-sub">Modify surface values</span>
+        <div class="spy-pair spy-quad">
+          <label>T<input name="sfc_T" type="number" step="any" placeholder="°C" /></label>
+          <label>Td<input name="sfc_Td" type="number" step="any" placeholder="°C" /></label>
+          <label>Wind speed<input name="sfc_ws" type="number" step="any" placeholder="kts" /></label>
+          <label>Wind dir<input name="sfc_wd" type="number" step="any" placeholder="deg" /></label>
+        </div>
+      </fieldset>
+    </div>
+    <div class="spy-settings-actions">
+      <button class="spy-secondary" type="button" data-settings-reset>Reset to defaults</button>
+    </div>
+  </form>
+</details>

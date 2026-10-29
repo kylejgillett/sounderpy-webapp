@@ -1,0 +1,427 @@
+// Behaviour for the sounding-analysis pages. Expects the markup from
+// src/components/sounding/* inside an element with class "spy".
+
+// `npm run dev` talks to a local API (uvicorn api:app --port 8000); builds use the droplet.
+const API = (import.meta.env.PUBLIC_SOUNDERPY_API
+  ?? (import.meta.env.DEV ? "http://localhost:8000" : "https://api.sounderpy.app")).replace(/\/$/, "");
+
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+const status = $(".spy-status");
+const result = $(".spy-result");
+const settingsEl = $("#settings");
+let lastRequest = null;
+
+// ---- API ------------------------------------------------------------------
+
+async function api(path, body) {
+  const res = await fetch(API + path, body
+    ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+    : undefined);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const detail = Array.isArray(err.detail) ? err.detail.map((d) => d.msg).join("; ") : err.detail;
+    throw new Error(detail || `Server error (${res.status})`);
+  }
+  return res;
+}
+
+function setBusy(busy, message = "") {
+  $$(".spy-submit, [data-action], [data-download]").forEach((el) => el.toggleAttribute("disabled", busy));
+  status.textContent = message;
+  status.classList.remove("is-error");
+}
+
+function showError(err) {
+  setBusy(false);
+  status.textContent = err instanceof TypeError
+    ? "Could not reach the sounding server. Please try again in a moment."
+    : err.message;
+  status.classList.add("is-error");
+}
+
+// ---- Form values ------------------------------------------------------------
+
+const num = (v) => (v === "" || v == null ? null : Number(v));
+
+function readSettings() {
+  const f = (name) => settingsEl.querySelector(`[name="${name}"]`);
+  const smDir = num(f("sm_dir").value), smSpd = num(f("sm_spd").value);
+  const sfc = {};
+  for (const key of ["T", "Td", "ws", "wd"]) {
+    const v = num(f(`sfc_${key}`).value);
+    if (v !== null) sfc[key] = v;
+  }
+  return {
+    dark_mode: f("dark_mode").checked,
+    color_blind: f("color_blind").checked,
+    ecape: f("ecape").checked,
+    hodo: f("hodo").checked,
+    hodo_boundary_angle: num(f("hodo_boundary_angle").value),
+    map_zoom: num(f("map_zoom").value) ?? 2,
+    radar: f("radar").value || null,
+    radar_time: f("radar_time").value || null,
+    storm_motion: smDir !== null && smSpd !== null ? [smDir, smSpd] : f("storm_motion").value,
+    modify_sfc: Object.keys(sfc).length ? sfc : null,
+  };
+}
+
+// "7", "07", "07Z", "0700", "07:00" -> "07"; anything else -> null.
+const HOUR_MESSAGE = "Enter a UTC hour from 0 to 23, e.g. 12 or 00.";
+function parseHour(value) {
+  const m = /^(\d{1,2})(?::?(\d{2}))?\s*z?$/i.exec(String(value).trim());
+  return m && Number(m[1]) <= 23 ? m[1].padStart(2, "0") : null;
+}
+
+function buildRequest(form) {
+  const data = Object.fromEntries(new FormData(form));
+  const req = { source: form.dataset.source, settings: readSettings() };
+
+  if (req.source === "acars") {
+    if (!data.profile) throw new Error("Find flights and choose a profile first.");
+    const picked = JSON.parse(data.profile);
+    Object.assign(req, { profile: picked.id, hour: picked.hour, date: data.date });
+  } else if (req.source === "reanalysis") {
+    const [lat, lon] = data.coords.split(",").map((v) => Number(v.trim()));
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) throw new Error("Enter coordinates as \"lat, lon\".");
+    Object.assign(req, { lat, lon, date: data.date, hour: parseHour(data.hour) });
+  } else {
+    for (const [k, v] of Object.entries(data)) {
+      if (v !== "") req[k] = k === "fcst_hr" ? Number(v) : k === "hour" ? parseHour(v) : v;
+    }
+  }
+  return req;
+}
+
+// ---- Result frame -------------------------------------------------------------
+
+const SOURCE_NAMES = {
+  raob: "Observed radiosonde · RAOB",
+  acars: "Aircraft profile · ACARS",
+  bufkit: "Model forecast · BUFKIT",
+  reanalysis: "Model reanalysis · RAP-RUC",
+};
+const pad2 = (v) => String(v).padStart(2, "0");
+const titleCase = (s) => (s && s === s.toUpperCase() && s.length > 3
+  ? s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()) : s);
+const coords = (lat, lon) =>
+  `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? "N" : "S"}, ${Math.abs(lon).toFixed(2)}°${lon >= 0 ? "E" : "W"}`;
+const utc = (iso, opts) => new Intl.DateTimeFormat("en-US", { timeZone: "UTC", ...opts }).format(new Date(iso));
+
+function describeRequest(req) {
+  const when = req.date ? `${req.date} ${pad2(req.hour)}Z` : "";
+  const parts = {
+    raob: ["RAOB", req.site?.toUpperCase(), when],
+    acars: ["ACARS", req.profile, when],
+    bufkit: [req.model?.toUpperCase(), req.site?.toUpperCase(), `F${pad2(req.fcst_hr)}`, req.hour ? `run ${when}` : "latest run"],
+    reanalysis: ["RAP-RUC", req.lat != null ? coords(req.lat, req.lon) : "", when],
+  }[req.source];
+  if (req.settings.hodo) parts.push("hodograph");
+  return parts.filter(Boolean).join("  ·  ");
+}
+
+// Only the settings the user changed from their defaults.
+function settingsSummary(s) {
+  const sm = Array.isArray(s.storm_motion)
+    ? `${s.storm_motion[0]}° at ${s.storm_motion[1]} kt`
+    : { left_moving: "left mover", mean_wind: "mean wind" }[s.storm_motion];
+  const sfc = s.modify_sfc && Object.entries(s.modify_sfc)
+    .map(([k, v]) => `${k} ${v}${{ T: "°C", Td: "°C", ws: " kt", wd: "°" }[k]}`).join(", ");
+  return [
+    s.dark_mode && "Dark mode",
+    !s.color_blind && "Standard colors (color-blind mode off)",
+    s.ecape && "ECAPE parcel path",
+    s.hodo && "Hodograph only",
+    s.hodo_boundary_angle != null && `Boundary axis at ${s.hodo_boundary_angle}°`,
+    s.map_zoom === 0 ? "Map hidden" : s.map_zoom !== 2 && `Map zoom ${s.map_zoom}`,
+    s.radar && `Radar: ${s.radar}${s.radar_time ? ` at ${s.radar_time.replace("T", " ")} UTC` : ""}`,
+    sm && `Storm motion: ${sm}`,
+    sfc && `Surface modified: ${sfc}`,
+  ].filter(Boolean);
+}
+
+function loadingHint(req) {
+  if (req.source === "reanalysis") return "Reanalysis data can take a minute or more.";
+  if (req.settings.ecape || req.settings.radar) return "ECAPE and radar maps add extra time.";
+  return "Usually 5–30 seconds.";
+}
+
+let timer = null;
+function startLoading(req) {
+  const started = Date.now();
+  const elapsed = $(".spy-elapsed");
+  const hint = $(".spy-loading-hint");
+  $(".spy-loading-request").textContent = describeRequest(req);
+  $(".spy-loading-settings").replaceChildren(...settingsSummary(req.settings).map((text) => {
+    const li = document.createElement("li");
+    li.textContent = text;
+    return li;
+  }));
+  hint.textContent = loadingHint(req);
+  elapsed.textContent = "0:00";
+  result.dataset.state = "loading";
+  result.setAttribute("aria-busy", "true");
+  clearInterval(timer);
+  timer = setInterval(() => {
+    const s = Math.floor((Date.now() - started) / 1000);
+    elapsed.textContent = `${Math.floor(s / 60)}:${pad2(s % 60)}`;
+    if (s === 60) hint.textContent = "Still working. The data source may be slow right now.";
+  }, 1000);
+}
+
+function stopLoading() {
+  clearInterval(timer);
+  result.dataset.state = $("img", result).getAttribute("src") ? "ready" : "empty";
+  result.setAttribute("aria-busy", "false");
+}
+
+function renderCaption(req, label, info) {
+  const caption = $(".spy-caption");
+  const meta = $(".spy-meta");
+  meta.replaceChildren();
+  const row = (term, value) => {
+    if (!value) return;
+    const item = document.createElement("span"), key = document.createElement("b");
+    key.textContent = term;
+    item.append(key, ` ${value}`);
+    meta.append(item);
+  };
+
+  if (!info) {
+    $(".spy-kicker").textContent = SOURCE_NAMES[req.source];
+    $(".spy-title").textContent = label;
+    caption.hidden = false;
+    return;
+  }
+
+  const place = [titleCase(info.site_name), info.location].filter(Boolean).join(", ");
+  $(".spy-kicker").textContent = [
+    req.source === "bufkit" && info.model ? `${info.model} model forecast · BUFKIT` : SOURCE_NAMES[req.source],
+    req.settings.hodo ? "Hodograph" : "",
+  ].filter(Boolean).join("  ·  ");
+  $(".spy-title").textContent = req.source === "reanalysis"
+    ? coords(info.lat, info.lon)
+    : [info.site_id, place].filter(Boolean).join("  ·  ");
+
+  if (info.valid_time) row("Valid", `${utc(info.valid_time, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })} UTC ${utc(info.valid_time, { weekday: "short", month: "short", day: "numeric", year: "numeric" })}`);
+  if (info.run_time) row("Run", `${utc(info.run_time, { hour: "2-digit", hourCycle: "h23" })}Z ${utc(info.run_time, { month: "short", day: "numeric" })}${info.fcst_hour ? `, ${info.fcst_hour}` : ""}`);
+  row("At", [req.source !== "reanalysis" && coords(info.lat, info.lon), info.elevation_m != null && `${info.elevation_m.toLocaleString()} m`].filter(Boolean).join(", "));
+  caption.hidden = false;
+}
+
+// Bumped whenever the frame is cleared, so a response for an abandoned request is ignored.
+let requestId = 0;
+
+function clearResult() {
+  requestId++;
+  clearInterval(timer);
+  lastRequest = null;
+  const img = $("img", result);
+  img.removeAttribute("src");
+  img.alt = "";
+  $(".spy-image-link").removeAttribute("href");
+  $('[data-download="png"]').removeAttribute("href");
+  $(".spy-caption").hidden = true;
+  result.dataset.state = "empty";
+  result.setAttribute("aria-busy", "false");
+  setBusy(false);
+}
+
+async function getSounding(form) {
+  let req;
+  try { req = buildRequest(form); } catch (err) { return showError(err); }
+
+  const id = ++requestId;
+  setBusy(true);
+  startLoading(req);
+  result.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  try {
+    const { label, info, image } = await (await api("/api/sounding", req)).json();
+    if (id !== requestId) return;
+    lastRequest = req;
+    renderCaption(req, label, info);
+    const img = $("img", result);
+    img.src = image;
+    img.alt = label;
+    $(".spy-image-link").href = image;
+    $('[data-download="png"]').href = image;
+    setBusy(false);
+    stopLoading();
+  } catch (err) {
+    if (id !== requestId) return;
+    stopLoading();
+    showError(err);
+  }
+}
+
+async function downloadFile(output) {
+  if (!lastRequest) return;
+  setBusy(true, `Preparing ${output.toUpperCase()} file…`);
+  try {
+    const res = await api("/api/sounding", { ...lastRequest, output });
+    const name = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? `sounderpy_data.${output}`;
+    const url = URL.createObjectURL(await res.blob());
+    Object.assign(document.createElement("a"), { href: url, download: name }).click();
+    URL.revokeObjectURL(url);
+    setBusy(false);
+  } catch (err) {
+    showError(err);
+  }
+}
+
+function setSearchMode(form, mode) {
+  form.search.value = mode;
+  for (const el of $$("[data-search]", form)) el.hidden = el.dataset.search !== mode;
+}
+
+// Step 1 of ACARS: list flights for one airport (all day) or one hour (all airports).
+// `focus` is the airport clicked on the map; its popup shows the results.
+async function findProfiles(form, { focus } = {}) {
+  const byAirport = form.search.value === "airport";
+  const date = form.date.value, airport = form.airport.value.trim().toUpperCase(), hour = parseHour(form.hour.value);
+  if (!date) return showError(new Error("Choose a flight date first."));
+  if (byAirport && !airport) return showError(new Error("Enter an airport code, or click an airport on the map."));
+  if (!byAirport && !hour) return showError(new Error(HOUR_MESSAGE));
+
+  const params = new URLSearchParams({ date });
+  byAirport ? params.set("airport", airport) : params.set("hour", hour);
+  setBusy(true, byAirport ? `Searching all 24 hours for ${airport}…` : `Searching ${hour}Z flights at every airport…`);
+  if (focus) maps.acars?.airports?.searching(focus);
+
+  try {
+    const profiles = await (await api(`/api/acars/profiles?${params}`)).json();
+    const select = form.profile;
+    select.replaceChildren(new Option(
+      profiles.length ? `${profiles.length} profile${profiles.length === 1 ? "" : "s"} found. Choose one…` : "No profiles found. Try another date or airport.", ""));
+    for (const p of profiles) select.add(new Option(`${p.id} (${p.hour}Z) · ${p.airport}`, JSON.stringify(p)));
+    maps.acars?.airports?.show(profiles, { focus });
+    setBusy(false);
+  } catch (err) {
+    showError(err);
+  }
+}
+
+async function loadLatestRuns() {
+  try {
+    const runs = await (await api("/api/bufkit/latest-runs")).json();
+    const select = $('[data-source="bufkit"] [name="model"]');
+    for (const run of runs) {
+      const opt = [...select.options].find((o) => o.value === run.model);
+      if (opt) opt.textContent = `${run.model.toUpperCase()}${run.latest_run ? ` · latest ${run.latest_run}` : ""}`;
+    }
+  } catch { /* model names alone are fine */ }
+}
+
+// ---- Maps (Leaflet loads on first use) ----------------------------------------
+
+const maps = {};
+
+async function initMap(form) {
+  const source = form.dataset.source;
+  if (maps[source]) return maps[source].map.invalidateSize();
+  maps[source] = {};
+  const el = $(".spy-map", form);
+
+  try {
+    const { createBaseMap, fetchData, stationLayer, pointPicker, airportLayer, FAINT_DOT } = await import("./station-map.js");
+    const map = maps[source].map = createBaseMap(el);
+
+    if (source === "raob" || source === "bufkit") {
+      const rows = await fetchData(`${source}-stations.json`);
+      const layer = stationLayer(map, rows, { onPick: ([id]) => { form.site.value = id; } });
+      layer.select(form.site.value);
+      form.site.addEventListener("input", () => layer.select(form.site.value, { pan: true }));
+    } else if (source === "reanalysis") {
+      const picker = pointPicker(map, { onPick: (lat, lon) => { form.coords.value = `${lat}, ${lon}`; } });
+      form.coords.addEventListener("change", () => {
+        const [lat, lon] = form.coords.value.split(",").map(Number);
+        if (Number.isFinite(lat) && Number.isFinite(lon)) picker.set(lat, lon, { pan: true });
+      });
+    } else if (source === "acars") {
+      // Every airport as a faint dot (click to search it), then search results on top.
+      // Clicking an airport searches it straight away.
+      const all = stationLayer(map, await fetchData("airports.json"), {
+        style: FAINT_DOT,
+        popup: false,
+        onPick: ([code, , , lat, lon]) => {
+          setSearchMode(form, "airport");
+          form.airport.value = code;
+          findProfiles(form, { focus: { code, lat, lon } });
+        },
+      });
+      form.airport.addEventListener("input", () => all.select(form.airport.value, { pan: true }));
+      maps.acars.airports = airportLayer(map, {
+        onPick: (p) => { form.profile.value = JSON.stringify(p); form.profile.focus(); },
+      });
+    }
+  } catch (err) {
+    console.error(err);
+    el.textContent = "The map could not be loaded. You can still type values below.";
+    el.classList.add("is-error");
+  }
+}
+
+let currentTab = null;
+function showTab(name) {
+  if (currentTab && currentTab !== name) clearResult();
+  currentTab = name;
+  $$("[data-tab]").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.tab === name)));
+  $$(".spy-panel").forEach((p) => {
+    p.hidden = p.dataset.source !== name;
+    if (!p.hidden) initMap(p);
+  });
+  status.textContent = "";
+  if (location.hash !== `#${name}`) history.replaceState(null, "", `#${name}`);
+}
+
+// ---- Init ---------------------------------------------------------------------
+
+const now = new Date();
+const today = now.toISOString().slice(0, 10);
+const utcHour = now.getUTCHours();
+for (const form of $$(".spy-panel")) {
+  if (form.dataset.source !== "bufkit" && !form.date.value) form.date.value = today;
+}
+$('[data-source="raob"] [name="hour"]').value = utcHour >= 13 || utcHour < 1 ? "12" : "00";
+$('[data-source="acars"] [name="hour"]').value = String(utcHour).padStart(2, "0");
+
+// Hour boxes that a sounding request depends on get a friendly native validation message.
+// (ACARS is excluded: the picked profile carries its own hour.)
+for (const input of $$('.spy-panel:not([data-source="acars"]) [name="hour"]')) {
+  input.addEventListener("input", () => input.setCustomValidity(!input.value.trim() || parseHour(input.value) ? "" : HOUR_MESSAGE));
+}
+
+$$("[data-tab]").forEach((t) => t.addEventListener("click", () => showTab(t.dataset.tab)));
+$$(".spy-panel").forEach((form) => form.addEventListener("submit", (e) => { e.preventDefault(); getSounding(form); }));
+const acarsForm = $('[data-source="acars"]');
+$('[data-action="find-profiles"]').addEventListener("click", () => findProfiles(acarsForm));
+acarsForm.addEventListener("change", (e) => { if (e.target.name === "search") setSearchMode(acarsForm, e.target.value); });
+// Enter in a step-1 box searches instead of submitting the (not yet ready) sounding request.
+for (const name of ["airport", "hour"]) {
+  acarsForm[name].addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); findProfiles(acarsForm); }
+  });
+}
+
+// "Customize figure": show how many settings differ from the defaults, and allow a reset.
+const settingsForm = $(".spy-settings-form");
+function updateSettingsCount() {
+  const n = settingsSummary(readSettings()).length;
+  const badge = $(".spy-settings-count");
+  badge.textContent = `${n} change${n === 1 ? "" : "s"}`;
+  badge.hidden = n === 0;
+}
+settingsForm.addEventListener("submit", (e) => e.preventDefault());
+settingsForm.addEventListener("input", updateSettingsCount);
+settingsForm.addEventListener("change", updateSettingsCount);
+$("[data-settings-reset]").addEventListener("click", () => { settingsForm.reset(); updateSettingsCount(); });
+updateSettingsCount();
+$$("button[data-download]").forEach((b) => b.addEventListener("click", () => downloadFile(b.dataset.download)));
+
+const initial = location.hash.slice(1);
+showTab($(`[data-tab="${initial}"]`) ? initial : "raob");
+loadLatestRuns();
+api("/api/health")
+  .then((r) => r.json())
+  .then((info) => { $(".spy-version").textContent = `SounderPy v${info.sounderpy_version}`; })
+  .catch(() => { $(".spy-version").textContent = "Sounding server is offline"; });

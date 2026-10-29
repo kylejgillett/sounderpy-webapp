@@ -1,0 +1,32 @@
+/* Leaflet builds its own DOM, so these styles are global rather than page-scoped. */
+.leaflet-container { background: #24221f; font: inherit; }
+.leaflet-control-attribution { background: rgb(38 36 34 / 80%) !important; color: #b9a98a; }
+.leaflet-control-attribution a { color: #d4c49a; }
+.leaflet-bar a { background: #45413a; border-color: #786d59; color: #f6ebd2; }
+.leaflet-bar a:hover { background: #625c51; color: #f6ebd2; }
+
+.leaflet-tooltip { border: 1px solid #786d59; background: #45413a; color: #f6ebd2; box-shadow: none; font-size: .95rem; }
+.leaflet-tooltip-top::before { border-top-color: #786d59; }
+
+.spy-popup .leaflet-popup-content-wrapper,
+.spy-popup .leaflet-popup-tip { border: 1px solid #a6926d; background: #45413a; color: #f6ebd2; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
+.spy-popup .leaflet-popup-content { display: grid; gap: .2rem; margin: .8rem 1rem; font-size: 1rem; line-height: 1.4; }
+.spy-popup .leaflet-popup-content strong { color: #ddc386; font-size: 1.15rem; }
+.spy-popup .leaflet-popup-content small { color: #d9c9a7; }
+.spy-popup .leaflet-popup-close-button { color: #d9c9a7; }
+.spy-popup-choices { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .4rem; }
+.spy-popup-choices button { padding: .3rem .6rem; border: 1px solid #ad986f; border-radius: 6px; background: #514c44; color: #f2e6cd; font-weight: 600; cursor: pointer; }
+.spy-popup-choices button:hover { border-color: #ddc386; background: #625c51; }
+
+/* Town labels: a small dot with the name beside it; never intercepts clicks. */
+.leaflet-labels-pane { pointer-events: none; }
+.spy-place { width: 0; height: 0; }
+.spy-place span {
+  position: absolute; left: -2px; top: -2px; display: flex; align-items: center; gap: 4px; white-space: nowrap;
+  color: #cbbd9e; font-size: 11px; font-weight: 600; letter-spacing: .02em;
+  text-shadow: 0 0 3px #24221f, 0 0 3px #24221f, 0 0 2px #24221f;
+}
+.spy-place span::before { content: ""; flex: none; width: 4px; height: 4px; border-radius: 50%; background: #9a8a6c; }
+.spy-popup-busy { animation: spy-pulse 1.2s ease-in-out infinite; }
+@keyframes spy-pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .spy-popup-busy { animation: none; } }

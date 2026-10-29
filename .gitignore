@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.astro/
+.env*
+
+# Server (Python)
+server/venv/
+server/.venv/
+__pycache__/

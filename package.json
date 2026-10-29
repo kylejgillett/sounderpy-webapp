@@ -1,0 +1,17 @@
+{
+  "name": "sounderpy-webapp",
+  "type": "module",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "data": "node scripts/build-station-data.mjs"
+  },
+  "dependencies": {
+    "astro": "^5.18.2",
+    "leaflet": "^1.9.4",
+    "topojson-client": "^3.1.0"
+  }
+}
