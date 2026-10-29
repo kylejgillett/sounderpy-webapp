@@ -93,11 +93,60 @@ async function drawBasemap(map) {
   placeLabels(map, places);
 }
 
-const COLORS = { dot: "#d4c49a", edge: "#302d29", picked: "#ddc386", pickedEdge: "#f6ebd2", airport: "#bc9074" };
-const DOT = { radius: 4, weight: 1, color: COLORS.edge, fillColor: COLORS.dot, fillOpacity: 0.85 };
-const PICKED = { radius: 8, weight: 2, color: COLORS.pickedEdge, fillColor: COLORS.picked, fillOpacity: 1 };
+// Markers get a dark outline so they read clearly over both the basemap and radar echoes.
+const COLORS = { dot: "#f3ead6", edge: "#0d1215", picked: "#ffffff", pickedEdge: "#e0a93b", airport: "#e2876a" };
+const DOT = { radius: 4.5, weight: 1.5, color: COLORS.edge, fillColor: COLORS.dot, fillOpacity: 1 };
+const PICKED = { radius: 8, weight: 3, color: COLORS.pickedEdge, fillColor: COLORS.picked, fillOpacity: 1 };
 // Background reference points (e.g. every airport on the ACARS map).
-export const FAINT_DOT = { radius: 3, weight: 0.5, color: COLORS.edge, fillColor: "#a89a7c", fillOpacity: 0.6 };
+export const FAINT_DOT = { radius: 3, weight: 1, color: COLORS.edge, fillColor: "#b9c6cc", fillOpacity: 0.8 };
+
+// ---- Live radar: IEM's NEXRAD base-reflectivity composite (CONUS, every 5 minutes) ----
+
+const RADAR_TILES = "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png";
+const RADAR_META = "https://mesonet.agron.iastate.edu/data/gis/images/4326/USCOMP/n0q_0.json";
+const RADAR_REFRESH = 5 * 60_000;
+
+async function radarValidTime() {
+  const res = await fetch(RADAR_META, { cache: "no-store" });
+  if (!res.ok) throw new Error(`radar metadata: HTTP ${res.status}`);
+  return (await res.json()).meta.valid; // e.g. "2026-10-29T20:40:00Z"
+}
+
+// Radar sits between the basemap and the town labels, with an on/off toggle that shows its time.
+function addRadar(map) {
+  const pane = map.createPane("radar");
+  pane.style.zIndex = 300;
+  pane.style.pointerEvents = "none";
+  const tiles = L.tileLayer(RADAR_TILES, {
+    pane: "radar", opacity: 0.65,
+    attribution: 'Radar: <a href="https://mesonet.agron.iastate.edu/">Iowa Environmental Mesonet</a>',
+  }).addTo(map);
+
+  const toggle = L.control({ position: "topright" });
+  toggle.onAdd = () => {
+    const box = L.DomUtil.create("label", "spy-radar-toggle");
+    box.innerHTML = '<input type="checkbox" checked /><span>Radar</span><time>…</time>';
+    L.DomEvent.disableClickPropagation(box);
+    box.querySelector("input").addEventListener("change", (e) => (e.target.checked ? tiles.addTo(map) : tiles.remove()));
+    return box;
+  };
+  toggle.addTo(map);
+  const time = toggle.getContainer().querySelector("time");
+
+  async function refresh() {
+    try {
+      const valid = await radarValidTime();
+      tiles.setUrl(`${RADAR_TILES}?valid=${encodeURIComponent(valid)}`); // new frame, new URL: no stale cached tiles
+      time.dateTime = valid;
+      time.textContent = `${valid.slice(11, 16)}Z`;
+      time.title = `NEXRAD composite valid ${valid.replace("T", " ").replace(":00Z", " UTC")}`;
+    } catch {
+      time.textContent = "unavailable";
+    }
+  }
+  refresh();
+  setInterval(refresh, RADAR_REFRESH);
+}
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -109,6 +158,7 @@ export function createBaseMap(el, { center = [39, -96], zoom = 4 } = {}) {
   });
   map.attributionControl.addAttribution('Map data: <a href="https://www.naturalearthdata.com/">Natural Earth</a>');
   drawBasemap(map).catch((err) => console.error("Basemap failed to load", err));
+  addRadar(map);
   // The map stretches to its column's height, which changes as the form beside it grows.
   new ResizeObserver(() => map.invalidateSize()).observe(el);
   return map;

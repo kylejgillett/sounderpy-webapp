@@ -134,7 +134,7 @@ function settingsSummary(s) {
     s.hodo && "Hodograph only",
     s.hodo_boundary_angle != null && `Boundary axis at ${s.hodo_boundary_angle}°`,
     s.map_zoom === 0 ? "Map hidden" : s.map_zoom !== 2 && `Map zoom ${s.map_zoom}`,
-    s.radar && `Radar: ${s.radar}${s.radar_time ? ` at ${s.radar_time.replace("T", " ")} UTC` : ""}`,
+    s.radar && `Radar: ${{ "single-site": "NEXRAD site", mosaic: "MRMS mosaic" }[s.radar]}${s.radar_time ? ` at ${s.radar_time.replace("T", " ")} UTC` : ""}`,
     sm && `Storm motion: ${sm}`,
     sfc && `Surface modified: ${sfc}`,
   ].filter(Boolean);
@@ -361,10 +361,19 @@ async function initMap(form) {
   }
 }
 
+// Where each data source comes from (shown under the sounding).
+const CREDITS = {
+  raob: "Observed soundings: University of Wyoming upper-air archive (IGRA v2 from NOAA NCEI for IGRA station IDs).",
+  acars: "Aircraft profiles: ACARS/AMDAR data from the University of Oklahoma SHARP archive.",
+  bufkit: "Forecast soundings: Penn State BUFKIT feed, with past runs from the Iowa Environmental Mesonet archive.",
+  reanalysis: "Reanalysis: RAP and RUC model analyses from NOAA NCEI.",
+};
+
 let currentTab = null;
 function showTab(name) {
   if (currentTab && currentTab !== name) clearResult();
   currentTab = name;
+  $(".spy-credit").textContent = CREDITS[name];
   $$("[data-tab]").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.tab === name)));
   $$(".spy-panel").forEach((p) => {
     p.hidden = p.dataset.source !== name;
@@ -433,6 +442,7 @@ async function checkHealth() {
     const info = await (await api("/api/health")).json();
     health.dataset.state = "online";
     text.textContent = `Server online · SounderPy v${info.sounderpy_version}`;
+    $(".spy-footer-version").textContent = ` v${info.sounderpy_version}`;
   } catch {
     health.dataset.state = "offline";
     text.textContent = "Server offline · soundings are unavailable right now";
@@ -450,3 +460,16 @@ function tickClock() {
 }
 tickClock();
 setInterval(tickClock, 1000);
+
+// ---- Footer: copy the citation ----------------------------------------------------
+
+$("[data-copy-citation]").addEventListener("click", async (e) => {
+  const button = e.currentTarget;
+  try {
+    await navigator.clipboard.writeText($(".spy-citation").textContent.replace(/\s+/g, " ").trim());
+    button.textContent = "Copied!";
+  } catch {
+    button.textContent = "Select the text to copy";
+  }
+  setTimeout(() => { button.textContent = "Copy citation"; }, 2000);
+});

@@ -20,6 +20,15 @@
 .spy-popup-choices button { padding: .3rem .6rem; border: 1px solid #ad986f; border-radius: 6px; background: #514c44; color: #f2e6cd; font-weight: 600; cursor: pointer; }
 .spy-popup-choices button:hover { border-color: #ddc386; background: #625c51; }
 
+/* Radar on/off toggle with the composite's valid time */
+.spy-radar-toggle {
+  display: flex; align-items: center; gap: .45rem; margin: 10px 10px 0 0 !important; padding: .35rem .65rem;
+  border: 1px solid #5d6f78; border-radius: 6px; background: rgb(43 53 59 / 92%); color: #e3eaee;
+  font-size: .85rem; font-weight: 600; cursor: pointer;
+}
+.spy-radar-toggle input { margin: 0; accent-color: #7fc28a; }
+.spy-radar-toggle time { color: #9fb1ba; font-variant-numeric: tabular-nums; font-weight: 500; }
+
 /* Town labels: a small dot with the name beside it; never intercepts clicks. */
 .leaflet-labels-pane { pointer-events: none; }
 .spy-place { width: 0; height: 0; }

@@ -1,0 +1,22 @@
+---
+// One header menu item: line icon + label. External links open in a new tab and show ↗.
+const { href, label, icon, current = false, external = false } = Astro.props;
+const ICONS = {
+  sounding: '<path d="M4 20h16M4 20V4" /><path d="M9 20c0-5 3-6 2-10s2-5 1-6M15 20c-1-4 2-7 1-11" />',
+  book: '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z" /><path d="M4 21V5M8 7h7" />',
+  code: '<path d="m8 8-4 4 4 4m8-8 4 4-4 4M14 5l-4 14" />',
+  coffee: '<path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z" /><path d="M16 11h1.5a2.5 2.5 0 0 1 0 5H16M8 3v3M12 3v3" />',
+  person: '<circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" />',
+};
+---
+<a
+  class="nav-link"
+  href={href}
+  aria-current={current ? 'page' : undefined}
+  {...(external ? { target: '_blank', rel: 'noopener' } : {})}
+>
+  <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" set:html={ICONS[icon]} />
+  {label}
+  {external && <svg class="nav-ext" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" /></svg>}
+  {external && <span class="nav-sr">(opens in a new tab)</span>}
+</a>

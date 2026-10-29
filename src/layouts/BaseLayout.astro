@@ -1,17 +1,18 @@
 ---
 import '../styles/global.css';
 import { sitePath } from '../utils/site-path.js';
+import NavLink from '../components/NavLink.astro';
 const { title = 'SounderPy Sounding Analysis', description = 'Plot observed, aircraft, model forecast, and reanalysis soundings with SounderPy, right in your browser.' } = Astro.props;
 const currentPath = Astro.url.pathname.replace(/\/+$/, '') || '/';
 const isHome = currentPath === (sitePath('/').replace(/\/+$/, '') || '/');
 
 // Switch Documentation to https://docs.sounderpy.app/ once that domain is live.
 const links = [
-  { label: 'Build Soundings', href: sitePath('/'), current: isHome },
-  { label: 'Documentation', href: 'https://kylejgillett.github.io/sounderpy/' },
-  { label: 'Source Code', href: 'https://github.com/kylejgillett/sounderpy' },
-  { label: 'Support', href: 'https://www.buymeacoffee.com/kylejgillett' },
-  { label: 'Author', href: 'https://kylegillettphoto.com/' },
+  { label: 'Build Soundings', href: sitePath('/'), icon: 'sounding', current: isHome },
+  { label: 'Documentation', href: 'https://kylejgillett.github.io/sounderpy/', icon: 'book', external: true },
+  { label: 'Source Code', href: 'https://github.com/kylejgillett/sounderpy', icon: 'code', external: true },
+  { label: 'Support', href: 'https://www.buymeacoffee.com/kylejgillett', icon: 'coffee', external: true },
+  { label: 'Author', href: 'https://kylegillettphoto.com/', icon: 'person', external: true },
 ];
 ---
 <!doctype html>
@@ -28,12 +29,12 @@ const links = [
       <a class="brand" href={sitePath('/')}>SounderPy Sounding Analysis<span>An atmospheric sounding visualization and analysis tool for Python <em>(and your browser!)</em></span></a>
       <nav aria-label="Main navigation">
         <div class="site-nav-links">
-          {links.map((l) => <a href={l.href} aria-current={l.current ? 'page' : undefined}>{l.label}</a>)}
+          {links.map((l) => <NavLink {...l} />)}
         </div>
         <details class="site-nav-mobile">
           <summary>Menu</summary>
           <div class="site-nav-mobile-links">
-            {links.map((l) => <a href={l.href} aria-current={l.current ? 'page' : undefined}>{l.label}</a>)}
+            {links.map((l) => <NavLink {...l} />)}
           </div>
         </details>
       </nav>

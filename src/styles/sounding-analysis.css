@@ -187,7 +187,17 @@
 .spy-download span { display: grid; font-size: 1.05rem; font-weight: 700; line-height: 1.2; text-align: left; }
 .spy-download small { color: var(--ink-soft); font-size: .8rem; font-weight: 500; }
 
-.spy-footer { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; margin-top: 3rem; padding-top: 1.25rem; border-top: 1px solid var(--line); font-size: .95rem; }
+/* Footer under the sounding: about / cite / help */
+.spy-footer {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem 2.25rem;
+  margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--line); color: var(--ink-soft); font-size: .92rem; line-height: 1.55;
+}
+.spy-footer section { display: grid; align-content: start; gap: .5rem; }
+.spy-footer h2 { margin: 0 0 .15rem; color: var(--forest-deep); font-family: var(--serif); font-size: 1.1rem; font-weight: 600; }
+.spy-footer p { margin: 0; }
+.spy-citation { color: var(--ink); }
+.spy-citation a { overflow-wrap: anywhere; }
+.spy-footer .spy-copy { justify-self: start; min-height: 2.6rem; padding: .4rem .9rem; font-size: .88rem; }
 
 @media (max-width: 820px) {
   .spy-panel { grid-template-columns: 1fr; }

@@ -101,6 +101,14 @@ button, input, textarea, select { font: inherit; }
 .site-header nav { display: flex; gap: 1.35rem; flex-wrap: wrap; }
 .site-nav-links { display: flex; gap: 1.35rem; flex-wrap: wrap; }
 .site-nav-mobile { display: none; }
+
+/* Menu items: line icon + label; external links get a small ↗ */
+.nav-link { display: inline-flex; align-items: center; gap: .4rem; }
+.nav-icon, .nav-ext { flex: none; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; }
+.nav-icon { width: 1.05em; height: 1.05em; stroke-width: 1.8; opacity: .85; }
+.nav-ext { width: .7em; height: .7em; stroke-width: 2.4; opacity: .55; }
+.nav-link:hover .nav-ext { opacity: 1; }
+.nav-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .site-header nav a, footer a {
   color: var(--forest);
   font-size: 1.1rem;
@@ -540,7 +548,7 @@ footer {
   .site-nav-mobile summary::after { content: '⌄'; color: var(--ochre); font-size: 1.25rem; }
   .site-nav-mobile[open] summary::after { content: '⌃'; }
   .site-nav-mobile-links { display: grid; gap: .15rem; padding: .45rem; margin-top: .35rem; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--paper-light); }
-  .site-nav-mobile-links a { display: block; padding: .6rem .65rem; border-radius: 5px; }
+  .site-nav-mobile-links a { display: flex; padding: .6rem .65rem; border-radius: 5px; }
   .site-nav-mobile-links a:hover { background: rgb(255 255 255 / 6%); }
   .cards { grid-template-columns: 1fr; }
   .home-feature { grid-template-columns: 1fr; gap: 1.5rem; }

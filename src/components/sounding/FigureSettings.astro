@@ -25,11 +25,11 @@
       <fieldset>
         <legend>Map &amp; radar</legend>
         <label>Map zoom (0 hides the map)<input name="map_zoom" type="number" min="0" value="2" /></label>
-        <label>Radar<select name="radar"><option value="">None</option><option>single-site</option><option>mosaic</option></select></label>
+        <label>Radar Source (NEXRAD site or MRMS)<select name="radar"><option value="">None</option><option value="single-site">NEXRAD site (nearest radar)</option><option value="mosaic">MRMS mosaic</option></select></label>
         <label>Radar time (UTC)<input name="radar_time" type="datetime-local" title="Leave blank to use the sounding time" /></label>
       </fieldset>
       <fieldset>
-        <legend>Storm motion &amp; surface</legend>
+        <legend>Custom storm motion &amp; surface</legend>
         <label>Storm motion<select name="storm_motion"><option value="right_moving">Right mover</option><option value="left_moving">Left mover</option><option value="mean_wind">Mean wind</option></select></label>
         <div class="spy-pair">
           <label>Custom direction<input name="sm_dir" type="number" placeholder="deg" /></label>
