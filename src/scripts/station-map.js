@@ -7,16 +7,16 @@ import "leaflet/dist/leaflet.css";
 import "../styles/station-map.css";
 
 // Basemap drawn from Natural Earth data (public domain), so there are no tile servers or
-// API keys involved. An earthy prairie palette: dark wheat land, dusty sage-grey water,
-// straw borders and rust highways. It's lighter and greener than the page, so it stands apart.
-const OCEAN = "#3d4640";
+// API keys involved. An earthy prairie palette: wheat land, blue-tinged sage water, dark
+// umber boundaries and rust highways. It's lighter than the page, so it stands apart.
+const OCEAN = "#3a4749";
 const BASE = {
-  land: { stroke: true, color: "#b4a275", weight: 0.9, fillColor: "#5c5443", fillOpacity: 1 },
-  lakes: { stroke: true, color: "#8a978a", weight: 0.6, fillColor: OCEAN, fillOpacity: 1 },
+  land: { stroke: true, color: "#2c2820", weight: 1, fillColor: "#5c5443", fillOpacity: 1 },
+  lakes: { stroke: true, color: "#2c2820", weight: 0.7, fillColor: OCEAN, fillOpacity: 1 },
   highways: { color: "#a86c4c", weight: 1, opacity: 0.75 },
-  countries: { color: "#d2c193", weight: 1.1, opacity: 0.95 },
-  states: { color: "#8f8266", weight: 0.7, opacity: 0.95 },
-  graticule: { color: "#4a524b", weight: 1, dashArray: "2 4" },
+  countries: { color: "#231f19", weight: 1.3, opacity: 0.9 },
+  states: { color: "#38332a", weight: 0.8, opacity: 0.85 },
+  graticule: { color: "#4a5556", weight: 1, dashArray: "2 4" },
 };
 const HIGHWAY_MIN_ZOOM = 5;
 const MAX_PLACE_LABELS = 120;
