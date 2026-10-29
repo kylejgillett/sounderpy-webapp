@@ -7,3 +7,6 @@ dist/
 server/venv/
 server/.venv/
 __pycache__/
+
+# Docs (README, DEPLOY, etc.) live outside the repo in ../sounderpy-webapp-docs
+*.md
