@@ -1,7 +1,20 @@
 /* Shared styles for the sounding-analysis pages (everything is under .spy). */
 
 .spy { padding-bottom: 4rem; }
-.spy-lede { max-width: var(--reading-width); margin: 1rem auto 0; color: var(--ink-soft); font-size: 1.1rem; line-height: 1.6; }
+.spy-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Status bar: server health (left), UTC clock (right) */
+.spy-statusbar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1.5rem;
+  margin-top: 1.5rem; padding: .6rem .9rem; border: 1px solid var(--line); border-radius: 8px;
+  background: rgb(69 65 58 / 45%); color: var(--ink-soft); font-size: .9rem;
+}
+.spy-statusbar p { display: flex; align-items: center; gap: .55rem; margin: 0; }
+.spy-health-dot { flex: none; width: .6rem; height: .6rem; border-radius: 50%; background: var(--line-strong); }
+.spy-health[data-state="online"] .spy-health-dot { background: #9cc17f; box-shadow: 0 0 0 3px rgb(156 193 127 / 18%); }
+.spy-health[data-state="offline"] .spy-health-dot { background: #e48d70; box-shadow: 0 0 0 3px rgb(228 141 112 / 18%); }
+.spy-health[data-state="offline"] .spy-health-text { color: #f0a58a; }
+.spy-utc { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 .spy a { color: var(--forest); text-underline-offset: 3px; }
 
 .spy-tabs { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1.5rem 0 1rem; border-bottom: 1px solid var(--line); }
@@ -162,7 +175,6 @@
 .spy-download small { color: var(--ink-soft); font-size: .8rem; font-weight: 500; }
 
 .spy-footer { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; margin-top: 3rem; padding-top: 1.25rem; border-top: 1px solid var(--line); font-size: .95rem; }
-.spy-version { margin-left: auto; color: var(--ink-soft); }
 
 @media (max-width: 640px) {
   .spy-tabs button { flex: 1 1 45%; border-radius: 6px; border: 1px solid var(--line); }
@@ -174,5 +186,4 @@
   .spy-meta span + span::before { content: none; }
   .spy-result .spy-frame { aspect-ratio: auto !important; min-height: 18rem; }
   .spy-loading { padding: 1rem; }
-  .spy-version { margin-left: 0; }
 }

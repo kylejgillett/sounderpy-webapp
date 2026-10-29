@@ -1,5 +1,6 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
+import StatusBar from "../components/sounding/StatusBar.astro";
 import SourceTabs from "../components/sounding/SourceTabs.astro";
 import SourceForms from "../components/sounding/SourceForms.astro";
 import FigureSettings from "../components/sounding/FigureSettings.astro";
@@ -11,11 +12,10 @@ const description = "Plot observed, aircraft, model forecast, and reanalysis sou
 ---
 <BaseLayout title={title} description={description}>
   <article class="container spy">
-    <header class="page-head">
-      <h1>{title}</h1>
-      <p class="spy-lede">Plot soundings and hodographs with <a href="https://kylejgillett.github.io/sounderpy/">SounderPy</a>, right in your browser. No coding required.</p>
-    </header>
+    <!-- The site header shows the title; this keeps a page heading for screen readers. -->
+    <h1 class="spy-sr-only">{title}</h1>
 
+    <StatusBar />
     <SourceTabs />
     <SourceForms />
     <FigureSettings />

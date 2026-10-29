@@ -1,0 +1,11 @@
+---
+// Thin bar above the tabs: sounding-server health (left) and the current UTC time (right).
+// Filled in by sounding-app.js.
+---
+<div class="spy-statusbar">
+  <p class="spy-health" data-state="checking" role="status" aria-live="polite">
+    <span class="spy-health-dot" aria-hidden="true"></span>
+    <span class="spy-health-text">Checking sounding server…</span>
+  </p>
+  <p class="spy-clock"><time class="spy-utc"></time></p>
+</div>

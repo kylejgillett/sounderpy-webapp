@@ -1,7 +1,7 @@
 ---
 import '../styles/global.css';
 import { sitePath } from '../utils/site-path.js';
-const { title = 'SounderPy Soundings', description = 'Plot observed, aircraft, model forecast, and reanalysis soundings with SounderPy, right in your browser.' } = Astro.props;
+const { title = 'SounderPy Sounding Analysis', description = 'Plot observed, aircraft, model forecast, and reanalysis soundings with SounderPy, right in your browser.' } = Astro.props;
 const currentPath = Astro.url.pathname.replace(/\/+$/, '') || '/';
 const isHome = currentPath === (sitePath('/').replace(/\/+$/, '') || '/');
 
@@ -20,12 +20,12 @@ const links = [
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
-    <title>{title.includes('SounderPy') ? title : `${title} | SounderPy Soundings`}</title>
+    <title>{title.includes('SounderPy') ? title : `${title} | SounderPy Sounding Analysis`}</title>
     <link rel="icon" href={sitePath('/favicon.png')} type="image/png" />
   </head>
   <body>
     <header class="site-header" style={`--header-map: url("${sitePath('/500_heights.gif')}")`}>
-      <a class="brand" href={sitePath('/')}>SounderPy Soundings<span>Sounding analysis and visualization, right in your browser.</span></a>
+      <a class="brand" href={sitePath('/')}>SounderPy Sounding Analysis<span>An atmospheric sounding visualization and analysis tool for Python <em>(and your browser!)</em></span></a>
       <nav aria-label="Main navigation">
         <div class="site-nav-links">
           {links.map((l) => <a href={l.href} aria-current={l.current ? 'page' : undefined}>{l.label}</a>)}

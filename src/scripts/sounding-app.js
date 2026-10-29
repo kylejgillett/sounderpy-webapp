@@ -421,7 +421,32 @@ $$("button[data-download]").forEach((b) => b.addEventListener("click", () => dow
 const initial = location.hash.slice(1);
 showTab($(`[data-tab="${initial}"]`) ? initial : "raob");
 loadLatestRuns();
-api("/api/health")
-  .then((r) => r.json())
-  .then((info) => { $(".spy-version").textContent = `SounderPy v${info.sounderpy_version}`; })
-  .catch(() => { $(".spy-version").textContent = "Sounding server is offline"; });
+
+// ---- Status bar: server health and UTC clock ----------------------------------
+
+const HEALTH_INTERVAL = 60_000;
+const health = $(".spy-health");
+
+async function checkHealth() {
+  const text = $(".spy-health-text");
+  try {
+    const info = await (await api("/api/health")).json();
+    health.dataset.state = "online";
+    text.textContent = `Server online · SounderPy v${info.sounderpy_version}`;
+  } catch {
+    health.dataset.state = "offline";
+    text.textContent = "Server offline · soundings are unavailable right now";
+  }
+}
+checkHealth();
+setInterval(checkHealth, HEALTH_INTERVAL);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) checkHealth(); });
+
+const clock = $(".spy-utc");
+function tickClock() {
+  const now = new Date();
+  clock.dateTime = now.toISOString();
+  clock.textContent = `${utc(now, { weekday: "short", month: "short", day: "numeric" })} · ${utc(now, { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })} UTC`;
+}
+tickClock();
+setInterval(tickClock, 1000);
