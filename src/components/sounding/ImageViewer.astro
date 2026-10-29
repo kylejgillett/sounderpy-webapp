@@ -1,0 +1,34 @@
+---
+// Full-screen, zoomable view of the sounding. Opened by clicking the plot; driven by sounding-app.js.
+---
+<dialog class="spy-viewer" aria-label="Sounding viewer">
+  <div class="spy-viewer-bar">
+    <p class="spy-viewer-title"></p>
+    <div class="spy-viewer-tools">
+      <button type="button" data-viewer="out" aria-label="Zoom out" title="Zoom out (−)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /></svg>
+      </button>
+      <output class="spy-viewer-zoom" aria-live="polite">100%</output>
+      <button type="button" data-viewer="in" aria-label="Zoom in" title="Zoom in (+)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14" /></svg>
+      </button>
+      <button type="button" data-viewer="fit" title="Fit to screen (0)">Fit</button>
+      <span class="spy-viewer-gap"></span>
+      <button type="button" data-viewer="copy" title="Copy image to clipboard">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></svg>
+        <span>Copy</span>
+      </button>
+      <a class="spy-viewer-download" download="sounderpy_plot.png" title="Download PNG">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19.5h14" /></svg>
+        <span>PNG</span>
+      </a>
+      <button type="button" data-viewer="close" aria-label="Close viewer" title="Close (Esc)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+      </button>
+    </div>
+  </div>
+  <div class="spy-viewer-stage" tabindex="0" aria-label="Scroll or pinch to zoom, drag to pan. Arrow keys pan, plus and minus zoom, 0 fits.">
+    <img class="spy-viewer-img" alt="" draggable="false" />
+  </div>
+  <p class="spy-viewer-hint">Scroll or pinch to zoom · drag to pan · double-click to zoom in</p>
+</dialog>

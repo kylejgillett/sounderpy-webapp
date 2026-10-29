@@ -1,6 +1,8 @@
 // Behaviour for the sounding-analysis pages. Expects the markup from
 // src/components/sounding/* inside an element with class "spy".
 
+import { createViewer } from "./image-viewer.js";
+
 // `npm run dev` talks to a local API (uvicorn api:app --port 8000); builds use the droplet.
 const API = (import.meta.env.PUBLIC_SOUNDERPY_API
   ?? (import.meta.env.DEV ? "http://localhost:8000" : "https://api.sounderpy.app")).replace(/\/$/, "");
@@ -232,7 +234,6 @@ function clearResult() {
   const img = $("img", result);
   img.removeAttribute("src");
   img.alt = "";
-  $(".spy-image-link").removeAttribute("href");
   $('[data-download="png"]').removeAttribute("href");
   $(".spy-caption").hidden = true;
   result.dataset.state = "empty";
@@ -261,7 +262,6 @@ async function runSounding(req, { record = false } = {}) {
     const img = $("img", result);
     img.src = image;
     img.alt = label;
-    $(".spy-image-link").href = image;
     $('[data-download="png"]').href = image;
     lastShareUrl = shareUrl;
     if (record && shareUrl !== location.pathname + location.search) history.pushState(null, "", shareUrl);
@@ -448,19 +448,38 @@ $("[data-settings-reset]").addEventListener("click", () => { settingsForm.reset(
 $$("button[data-download]").forEach((b) => b.addEventListener("click", () => downloadFile(b.dataset.download)));
 
 // Copy the plot itself (PNG) to the clipboard. The blob is passed as a promise, which Safari requires.
-$("[data-copy-image]").addEventListener("click", async (e) => {
-  const button = e.currentTarget, note = $("small", button);
+async function copyPlot() {
   const src = $("img", result).getAttribute("src");
-  if (!src) return;
+  if (!src || !window.ClipboardItem || !navigator.clipboard?.write) return false;
   try {
-    if (!window.ClipboardItem || !navigator.clipboard?.write) throw new Error("unsupported");
     const png = fetch(src).then((r) => r.blob()).then((b) => new Blob([b], { type: "image/png" }));
     await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
-    note.textContent = "copied!";
+    return true;
   } catch {
-    note.textContent = "not supported here, use PNG";
+    return false;
   }
-  setTimeout(() => { note.textContent = "image to clipboard"; }, 2500);
+}
+
+// Briefly swap a button's label for a result, e.g. "copied!".
+function flash(label, text, restore, ms = 2500) {
+  label.textContent = text;
+  setTimeout(() => { label.textContent = restore; }, ms);
+}
+
+$("[data-copy-image]").addEventListener("click", async (e) => {
+  const note = $("small", e.currentTarget);
+  flash(note, (await copyPlot()) ? "copied!" : "not supported here, use PNG", "image to clipboard");
+});
+
+// Clicking the plot opens it full screen, zoomable.
+const viewer = createViewer($(".spy-viewer"), {
+  onCopy: async (label) => flash(label, (await copyPlot()) ? "Copied!" : "Use PNG", "Copy"),
+});
+$(".spy-image-link").addEventListener("click", () => {
+  const src = $("img", result).getAttribute("src");
+  if (!src) return;
+  const title = [$(".spy-title").textContent, $(".spy-kicker").textContent].filter(Boolean).join("  ·  ");
+  viewer.open(src, title);
 });
 
 // ---- Shareable links and saved settings -------------------------------------------

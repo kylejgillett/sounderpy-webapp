@@ -169,7 +169,7 @@
 @keyframes spy-sweep { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
 @media (prefers-reduced-motion: reduce) { .spy-progress span { width: 100%; animation: none; opacity: .6; } }
 
-.spy-image-link { display: block; }
+.spy-image-link { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; }
 .spy-image-link img { display: block; width: 100%; height: auto; transition: opacity .2s; }
 
 .spy-result[data-state="empty"] :is(.spy-loading, .spy-image-link, .spy-downloads),
@@ -204,6 +204,39 @@
 .spy-dialog[open] { animation: spy-pop .16s ease-out; }
 @keyframes spy-pop { from { opacity: 0; transform: translateY(6px) scale(.98); } }
 @media (prefers-reduced-motion: reduce) { .spy-dialog[open] { animation: none; } }
+
+/* Zoomable sounding viewer (full-screen <dialog>) */
+.spy-viewer {
+  width: 100vw; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: 0; border: 0;
+  background: rgb(22 20 17 / 96%); color: var(--ink); overflow: hidden;
+}
+.spy-viewer[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.spy-viewer::backdrop { background: rgb(0 0 0 / 60%); }
+.spy-viewer-bar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem 1.5rem;
+  padding: .7rem 1rem; border-bottom: 1px solid var(--line); background: rgb(48 45 41 / 92%);
+}
+.spy-viewer-title { margin: 0; min-width: 0; overflow: hidden; color: var(--forest-deep); font-family: var(--serif); font-size: 1.15rem; text-overflow: ellipsis; white-space: nowrap; }
+.spy-viewer-tools { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+.spy-viewer-tools button, .spy-viewer-download {
+  display: inline-flex; align-items: center; justify-content: center; gap: .35rem; min-width: 2.6rem; height: 2.6rem; padding: 0 .7rem;
+  border: 1px solid var(--control-border); border-radius: 6px; background: var(--control-bg); color: var(--control-text);
+  font-size: .9rem; font-weight: 650; text-decoration: none; cursor: pointer;
+}
+.spy-viewer-tools button:hover, .spy-viewer-download:hover { border-color: var(--ochre); background: var(--control-bg-hover); }
+.spy-viewer-tools svg { width: 1.15rem; height: 1.15rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.spy-viewer-zoom { min-width: 3.6rem; color: var(--ink-soft); font-size: .9rem; font-variant-numeric: tabular-nums; text-align: center; }
+.spy-viewer-gap { width: .6rem; }
+.spy-viewer-stage { position: relative; overflow: hidden; cursor: grab; touch-action: none; user-select: none; }
+.spy-viewer-stage:focus-visible { outline: 2px solid var(--ochre); outline-offset: -2px; }
+.spy-viewer-stage.is-dragging { cursor: grabbing; }
+.spy-viewer-img { position: absolute; top: 0; left: 0; max-width: none; transform-origin: 0 0; background: #fff; box-shadow: 0 10px 40px rgb(0 0 0 / 55%); }
+.spy-viewer-hint { margin: 0; padding: .45rem 1rem; color: var(--ink-soft); font-size: .82rem; text-align: center; }
+@media (max-width: 640px) {
+  .spy-viewer-title { flex-basis: 100%; }
+  .spy-viewer-tools button span, .spy-viewer-download span { display: none; }
+  .spy-viewer-hint { display: none; }
+}
 
 /* Footer under the sounding: about / cite / help */
 .spy-footer {
