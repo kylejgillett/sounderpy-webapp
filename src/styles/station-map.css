@@ -1,14 +1,14 @@
 /* Leaflet builds its own DOM, so these styles are global rather than page-scoped. */
-/* Map chrome matches the map's cool slate palette (popups keep the site's warm look). */
-.leaflet-container { background: #1d252b; font: inherit; }
-.leaflet-control-attribution { background: rgb(29 37 43 / 85%) !important; color: #9fb1ba; }
-.leaflet-control-attribution a { color: #c9d6dc; }
-.leaflet-bar { border-color: #5d6f78 !important; }
-.leaflet-bar a { background: #2b353b; border-color: #5d6f78; color: #e3eaee; }
-.leaflet-bar a:hover { background: #3a464d; color: #fff; }
+/* Map chrome in warm greys to match the earthy map (popups keep the site's look). */
+.leaflet-container { background: #2e3530; font: inherit; }
+.leaflet-control-attribution { background: rgb(46 53 48 / 88%) !important; color: #b3ab95; }
+.leaflet-control-attribution a { color: #ddd0ac; }
+.leaflet-bar { border-color: #6e6754 !important; }
+.leaflet-bar a { background: #3b3a35; border-color: #6e6754; color: #efe6cf; }
+.leaflet-bar a:hover { background: #4a4840; color: #fff; }
 
-.leaflet-tooltip { border: 1px solid #5d6f78; background: #2b353b; color: #e3eaee; box-shadow: none; font-size: .95rem; }
-.leaflet-tooltip-top::before { border-top-color: #5d6f78; }
+.leaflet-tooltip { border: 1px solid #6e6754; background: #3b3a35; color: #efe6cf; box-shadow: none; font-size: .95rem; }
+.leaflet-tooltip-top::before { border-top-color: #6e6754; }
 
 .spy-popup .leaflet-popup-content-wrapper,
 .spy-popup .leaflet-popup-tip { border: 1px solid #a6926d; background: #45413a; color: #f6ebd2; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
@@ -23,21 +23,30 @@
 /* Radar on/off toggle with the composite's valid time */
 .spy-radar-toggle {
   display: flex; align-items: center; gap: .45rem; margin: 10px 10px 0 0 !important; padding: .35rem .65rem;
-  border: 1px solid #5d6f78; border-radius: 6px; background: rgb(43 53 59 / 92%); color: #e3eaee;
+  border: 1px solid #6e6754; border-radius: 6px; background: rgb(59 58 53 / 92%); color: #efe6cf;
   font-size: .85rem; font-weight: 600; cursor: pointer;
 }
 .spy-radar-toggle input { margin: 0; accent-color: #7fc28a; }
-.spy-radar-toggle time { color: #9fb1ba; font-variant-numeric: tabular-nums; font-weight: 500; }
+.spy-radar-toggle time { color: #b3ab95; font-variant-numeric: tabular-nums; font-weight: 500; }
+
+/* Station ID above each visible dot: small and faded, never intercepts clicks. */
+.leaflet-station-labels-pane { pointer-events: none; }
+.spy-station-label { width: 0; height: 0; }
+.spy-station-label span {
+  position: absolute; transform: translate(-50%, calc(-100% - 6px)); white-space: nowrap;
+  color: rgb(243 234 214 / 62%); font-size: 10px; font-weight: 700; letter-spacing: .04em;
+  text-shadow: 0 0 3px #1a1712, 0 0 2px #1a1712;
+}
 
 /* Town labels: a small dot with the name beside it; never intercepts clicks. */
 .leaflet-labels-pane { pointer-events: none; }
 .spy-place { width: 0; height: 0; }
 .spy-place span {
   position: absolute; left: -2px; top: -2px; display: flex; align-items: center; gap: 4px; white-space: nowrap;
-  color: #c3d0d6; font-size: 11px; font-weight: 600; letter-spacing: .02em;
-  text-shadow: 0 0 3px #1d252b, 0 0 3px #1d252b, 0 0 2px #1d252b;
+  color: #e2d6b8; font-size: 11px; font-weight: 600; letter-spacing: .02em;
+  text-shadow: 0 0 3px #2b2822, 0 0 3px #2b2822, 0 0 2px #2b2822;
 }
-.spy-place span::before { content: ""; flex: none; width: 4px; height: 4px; border-radius: 50%; background: #7f97a3; }
+.spy-place span::before { content: ""; flex: none; width: 4px; height: 4px; border-radius: 50%; background: #a8956a; }
 .spy-popup-busy { animation: spy-pulse 1.2s ease-in-out infinite; }
 @keyframes spy-pulse { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .spy-popup-busy { animation: none; } }

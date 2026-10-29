@@ -7,16 +7,16 @@ import "leaflet/dist/leaflet.css";
 import "../styles/station-map.css";
 
 // Basemap drawn from Natural Earth data (public domain), so there are no tile servers or
-// API keys involved. A cool slate "chart" palette sets the map apart from the warm page;
-// station dots and highways stay warm so they stand out on it.
-const OCEAN = "#1d252b";
+// API keys involved. An earthy prairie palette: dark wheat land, dusty sage-grey water,
+// straw borders and rust highways. It's lighter and greener than the page, so it stands apart.
+const OCEAN = "#2e3530";
 const BASE = {
-  land: { stroke: true, color: "#7f97a3", weight: 0.9, fillColor: "#323a3f", fillOpacity: 1 },
-  lakes: { stroke: true, color: "#5d7480", weight: 0.6, fillColor: OCEAN, fillOpacity: 1 },
-  highways: { color: "#b08d62", weight: 1, opacity: 0.7 },
-  countries: { color: "#a9b9c1", weight: 1.1, opacity: 0.95 },
-  states: { color: "#5e6c73", weight: 0.7, opacity: 0.95 },
-  graticule: { color: "#283239", weight: 1, dashArray: "2 4" },
+  land: { stroke: true, color: "#a8956a", weight: 0.9, fillColor: "#4a4335", fillOpacity: 1 },
+  lakes: { stroke: true, color: "#7d8a7c", weight: 0.6, fillColor: OCEAN, fillOpacity: 1 },
+  highways: { color: "#a86c4c", weight: 1, opacity: 0.75 },
+  countries: { color: "#d2c193", weight: 1.1, opacity: 0.95 },
+  states: { color: "#7f7258", weight: 0.7, opacity: 0.95 },
+  graticule: { color: "#3b403a", weight: 1, dashArray: "2 4" },
 };
 const HIGHWAY_MIN_ZOOM = 5;
 const MAX_PLACE_LABELS = 120;
@@ -94,11 +94,11 @@ async function drawBasemap(map) {
 }
 
 // Markers get a dark outline so they read clearly over both the basemap and radar echoes.
-const COLORS = { dot: "#f3ead6", edge: "#0d1215", picked: "#ffffff", pickedEdge: "#e0a93b", airport: "#e2876a" };
+const COLORS = { dot: "#f3ead6", edge: "#1a1712", picked: "#ffffff", pickedEdge: "#e0a93b", airport: "#c9784f" };
 const DOT = { radius: 4.5, weight: 1.5, color: COLORS.edge, fillColor: COLORS.dot, fillOpacity: 1 };
 const PICKED = { radius: 8, weight: 3, color: COLORS.pickedEdge, fillColor: COLORS.picked, fillOpacity: 1 };
 // Background reference points (e.g. every airport on the ACARS map).
-export const FAINT_DOT = { radius: 3, weight: 1, color: COLORS.edge, fillColor: "#b9c6cc", fillOpacity: 0.8 };
+export const FAINT_DOT = { radius: 3, weight: 1, color: COLORS.edge, fillColor: "#cdc3a9", fillOpacity: 0.8 };
 
 // ---- Live radar: IEM's NEXRAD base-reflectivity composite (CONUS, every 5 minutes) ----
 
@@ -168,25 +168,68 @@ function stationPopup([id, name, region, , , elev]) {
   return `<strong>${esc(id)}</strong><span>${esc([name, region].filter(Boolean).join(", "))}</span><small>${esc(elev)} m elevation · added to the form</small>`;
 }
 
-/** Clickable station dots. rows: [id, name, region, lat, lon, elev]. */
+// At most one station per CELL x CELL pixel square at the current zoom, so dense areas stay readable.
+const CELL = 44;
+
+/**
+ * Clickable station dots with faded ID labels, thinned out by zoom.
+ * rows: [id, name, region, lat, lon, elev].
+ */
 export function stationLayer(map, rows, { onPick, style = DOT, popup = true }) {
-  const markers = new Map();
+  if (!map.getPane("station-labels")) {
+    const pane = map.createPane("station-labels");
+    pane.style.zIndex = 450;
+    pane.style.pointerEvents = "none";
+  }
+  const entries = new Map();
   let picked = null;
 
-  for (const row of rows) {
+  // Main sites (4-character IDs like KOAX) win when stations crowd the same spot.
+  const ordered = [...rows].sort((a, b) => (b[0].length === 4) - (a[0].length === 4));
+  for (const row of ordered) {
     const marker = L.circleMarker([row[3], row[4]], style)
       .bindTooltip(`${esc(row[0])} · ${esc(row[1])}`, { direction: "top", offset: [0, -4] })
-      .on("click", () => { select(row[0]); onPick(row); })
-      .addTo(map);
-    markers.set(row[0].toUpperCase(), { marker, row });
+      .on("click", () => { select(row[0]); onPick(row); });
+    const label = L.marker([row[3], row[4]], {
+      pane: "station-labels", interactive: false, keyboard: false,
+      icon: L.divIcon({ className: "spy-station-label", html: `<span>${esc(row[0])}</span>`, iconSize: null }),
+    });
+    entries.set(row[0].toUpperCase(), { marker, label, row });
   }
 
+  function update() {
+    const zoom = map.getZoom(), bounds = map.getBounds().pad(0.2);
+    const taken = new Set(), visible = new Set();
+    const claim = (entry) => {
+      const p = map.project(entry.marker.getLatLng(), zoom);
+      const cell = `${Math.floor(p.x / CELL)}:${Math.floor(p.y / CELL)}`;
+      if (taken.has(cell)) return;
+      taken.add(cell);
+      visible.add(entry);
+    };
+    if (picked) { claim(picked); visible.add(picked); }
+    for (const entry of entries.values()) {
+      if (entry !== picked && bounds.contains(entry.marker.getLatLng())) claim(entry);
+    }
+    for (const entry of entries.values()) {
+      const show = visible.has(entry);
+      for (const layer of [entry.marker, entry.label]) {
+        if (show && !map.hasLayer(layer)) layer.addTo(map);
+        else if (!show && map.hasLayer(layer)) layer.remove();
+      }
+    }
+    picked?.marker.bringToFront();
+  }
+  map.on("moveend zoomend", update);
+  update();
+
   function select(id, { pan = false } = {}) {
-    const hit = markers.get(String(id).trim().toUpperCase());
+    const hit = entries.get(String(id).trim().toUpperCase());
     if (picked) picked.marker.setStyle(style);
     picked = hit ?? null;
     if (!hit) return false;
-    hit.marker.setStyle(PICKED).bringToFront();
+    hit.marker.setStyle(PICKED);
+    update(); // make sure the picked station is shown even where its neighbours win
     if (popup) hit.marker.bindPopup(stationPopup(hit.row), { className: "spy-popup" }).openPopup();
     if (pan) map.setView(hit.marker.getLatLng(), Math.max(map.getZoom(), 6));
     return true;
