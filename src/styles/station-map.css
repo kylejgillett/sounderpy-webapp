@@ -1,13 +1,13 @@
 /* Leaflet builds its own DOM, so these styles are global rather than page-scoped. */
 /* Map chrome in warm greys to match the earthy map (popups keep the site's look). */
-.leaflet-container { background: #2e3530; font: inherit; }
-.leaflet-control-attribution { background: rgb(46 53 48 / 88%) !important; color: #b3ab95; }
+.leaflet-container { background: #3d4640; font: inherit; }
+.leaflet-control-attribution { background: rgb(61 70 64 / 88%) !important; color: #b3ab95; }
 .leaflet-control-attribution a { color: #ddd0ac; }
 .leaflet-bar { border-color: #6e6754 !important; }
-.leaflet-bar a { background: #3b3a35; border-color: #6e6754; color: #efe6cf; }
-.leaflet-bar a:hover { background: #4a4840; color: #fff; }
+.leaflet-bar a { background: #4a4840; border-color: #6e6754; color: #efe6cf; }
+.leaflet-bar a:hover { background: #5a574d; color: #fff; }
 
-.leaflet-tooltip { border: 1px solid #6e6754; background: #3b3a35; color: #efe6cf; box-shadow: none; font-size: .95rem; }
+.leaflet-tooltip { border: 1px solid #7a7360; background: #4a4840; color: #efe6cf; box-shadow: none; font-size: .95rem; }
 .leaflet-tooltip-top::before { border-top-color: #6e6754; }
 
 .spy-popup .leaflet-popup-content-wrapper,
@@ -23,7 +23,7 @@
 /* Radar on/off toggle with the composite's valid time */
 .spy-radar-toggle {
   display: flex; align-items: center; gap: .45rem; margin: 10px 10px 0 0 !important; padding: .35rem .65rem;
-  border: 1px solid #6e6754; border-radius: 6px; background: rgb(59 58 53 / 92%); color: #efe6cf;
+  border: 1px solid #6e6754; border-radius: 6px; background: rgb(74 72 64 / 92%); color: #efe6cf;
   font-size: .85rem; font-weight: 600; cursor: pointer;
 }
 .spy-radar-toggle input { margin: 0; accent-color: #7fc28a; }

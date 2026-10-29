@@ -88,8 +88,8 @@ button, input, textarea, select { font: inherit; }
 }
 
 /* Logo on the left, title + tagline stacked on the right */
-.brand { display: flex; align-items: center; gap: 1rem; }
-.brand-logo { flex: none; width: 4.75rem; height: 4.75rem; border-radius: 50%; box-shadow: 0 3px 10px rgb(0 0 0 / 30%); }
+.brand { display: flex; align-items: center; gap: 1.2rem; }
+.brand-logo { flex: none; width: 6.5rem; height: 6.5rem; border-radius: 50%; box-shadow: 0 3px 10px rgb(0 0 0 / 30%); }
 .brand-text { min-width: 0; }
 
 .brand-text > span {
@@ -526,7 +526,7 @@ footer {
 }
 
 @media (max-width: 600px) {
-  .brand-logo { width: 3.6rem; height: 3.6rem; }
+  .brand-logo { width: 4.5rem; height: 4.5rem; }
   .sounderpy-facts { grid-template-columns: 1fr; }
   .document-row { align-items: stretch; flex-direction: column; }
   .document-actions a { flex: 1; }

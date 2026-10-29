@@ -9,14 +9,14 @@ import "../styles/station-map.css";
 // Basemap drawn from Natural Earth data (public domain), so there are no tile servers or
 // API keys involved. An earthy prairie palette: dark wheat land, dusty sage-grey water,
 // straw borders and rust highways. It's lighter and greener than the page, so it stands apart.
-const OCEAN = "#2e3530";
+const OCEAN = "#3d4640";
 const BASE = {
-  land: { stroke: true, color: "#a8956a", weight: 0.9, fillColor: "#4a4335", fillOpacity: 1 },
-  lakes: { stroke: true, color: "#7d8a7c", weight: 0.6, fillColor: OCEAN, fillOpacity: 1 },
+  land: { stroke: true, color: "#b4a275", weight: 0.9, fillColor: "#5c5443", fillOpacity: 1 },
+  lakes: { stroke: true, color: "#8a978a", weight: 0.6, fillColor: OCEAN, fillOpacity: 1 },
   highways: { color: "#a86c4c", weight: 1, opacity: 0.75 },
   countries: { color: "#d2c193", weight: 1.1, opacity: 0.95 },
-  states: { color: "#7f7258", weight: 0.7, opacity: 0.95 },
-  graticule: { color: "#3b403a", weight: 1, dashArray: "2 4" },
+  states: { color: "#8f8266", weight: 0.7, opacity: 0.95 },
+  graticule: { color: "#4a524b", weight: 1, dashArray: "2 4" },
 };
 const HIGHWAY_MIN_ZOOM = 5;
 const MAX_PLACE_LABELS = 120;
