@@ -179,7 +179,7 @@
 .spy-result[data-state="loading"]:not(:has(img[src])) .spy-image-link { display: none; }
 .spy-result[data-state="loading"] img { opacity: .3; }
 
-.spy-downloads { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
+.spy-downloads { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .75rem; }
 .spy-download {
   display: flex; align-items: center; justify-content: center; gap: .75rem; min-height: 4rem; padding: .7rem 1rem;
   border: 1px solid var(--control-border); border-radius: 8px; background: var(--control-bg);
@@ -230,6 +230,7 @@
   .spy-meta { flex-direction: column; }
   .spy-caption { grid-template-columns: 1fr; }
   .spy-downloads { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .spy-download:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .spy-meta span + span::before { content: none; }
   .spy-result .spy-frame { aspect-ratio: auto !important; min-height: 18rem; }
   .spy-loading { padding: 1rem; }

@@ -447,6 +447,22 @@ settingsForm.addEventListener("change", () => { updateSettingsCount(); saveSetti
 $("[data-settings-reset]").addEventListener("click", () => { settingsForm.reset(); updateSettingsCount(); saveSettings(); });
 $$("button[data-download]").forEach((b) => b.addEventListener("click", () => downloadFile(b.dataset.download)));
 
+// Copy the plot itself (PNG) to the clipboard. The blob is passed as a promise, which Safari requires.
+$("[data-copy-image]").addEventListener("click", async (e) => {
+  const button = e.currentTarget, note = $("small", button);
+  const src = $("img", result).getAttribute("src");
+  if (!src) return;
+  try {
+    if (!window.ClipboardItem || !navigator.clipboard?.write) throw new Error("unsupported");
+    const png = fetch(src).then((r) => r.blob()).then((b) => new Blob([b], { type: "image/png" }));
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+    note.textContent = "copied!";
+  } catch {
+    note.textContent = "not supported here, use PNG";
+  }
+  setTimeout(() => { note.textContent = "image to clipboard"; }, 2500);
+});
+
 // ---- Shareable links and saved settings -------------------------------------------
 // A sounding's request lives in the address (?source=raob&site=OAX&date=…&hour=12), so copying
 // the URL reproduces it. Figure settings are added only where they differ from the defaults.

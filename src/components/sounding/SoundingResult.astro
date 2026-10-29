@@ -46,10 +46,18 @@ const downloads = [
     {downloads.map(({ type, label, note }) => {
       const Tag = type === "png" ? "a" : "button";
       return (
-        <Tag class="spy-download" data-download={type} {...(type === "png" ? { download: "sounderpy_plot.png" } : { type: "button" })}>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19.5h14" /></svg>
-          <span>{label}<small>{note}</small></span>
-        </Tag>
+        <>
+          <Tag class="spy-download" data-download={type} {...(type === "png" ? { download: "sounderpy_plot.png" } : { type: "button" })}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19.5h14" /></svg>
+            <span>{label}<small>{note}</small></span>
+          </Tag>
+          {type === "png" && (
+            <button class="spy-download" type="button" data-copy-image>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></svg>
+              <span>Copy<small>image to clipboard</small></span>
+            </button>
+          )}
+        </>
       );
     })}
   </div>
