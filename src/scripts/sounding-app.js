@@ -274,9 +274,12 @@ async function runSounding(req, { record = false } = {}) {
   }
 }
 
-async function downloadFile(output) {
+// `button` (the one clicked) pulses while the file is prepared, which matters inside the
+// full-screen viewer where the status line is hidden.
+async function downloadFile(output, button) {
   if (!lastRequest) return;
   setBusy(true, `Preparing ${output.toUpperCase()} file…`);
+  button?.classList.add("is-busy");
   try {
     const res = await api("/api/sounding", { ...lastRequest, output });
     const name = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? `sounderpy_data.${output}`;
@@ -286,6 +289,8 @@ async function downloadFile(output) {
     setBusy(false);
   } catch (err) {
     showError(err, "Couldn't prepare that file");
+  } finally {
+    button?.classList.remove("is-busy");
   }
 }
 
@@ -445,7 +450,8 @@ settingsForm.addEventListener("submit", (e) => e.preventDefault());
 settingsForm.addEventListener("input", () => { updateSettingsCount(); saveSettings(); });
 settingsForm.addEventListener("change", () => { updateSettingsCount(); saveSettings(); });
 $("[data-settings-reset]").addEventListener("click", () => { settingsForm.reset(); updateSettingsCount(); saveSettings(); });
-$$("button[data-download]").forEach((b) => b.addEventListener("click", () => downloadFile(b.dataset.download)));
+// Data-file buttons, both under the plot and in the viewer's toolbar.
+$$("button[data-download]").forEach((b) => b.addEventListener("click", () => downloadFile(b.dataset.download, b)));
 
 // Copy the plot itself (PNG) to the clipboard. The blob is passed as a promise, which Safari requires.
 async function copyPlot() {

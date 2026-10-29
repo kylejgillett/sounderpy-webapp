@@ -227,6 +227,10 @@
 .spy-viewer-tools svg { width: 1.15rem; height: 1.15rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .spy-viewer-zoom { min-width: 3.6rem; color: var(--ink-soft); font-size: .9rem; font-variant-numeric: tabular-nums; text-align: center; }
 .spy-viewer-gap { width: .6rem; }
+/* A download button pulses while its file is being prepared */
+@keyframes spy-pulse { 50% { opacity: .45; } }
+.spy .is-busy, .spy-viewer .is-busy { animation: spy-pulse 1.1s ease-in-out infinite; opacity: 1 !important; }
+@media (prefers-reduced-motion: reduce) { .spy .is-busy, .spy-viewer .is-busy { animation: none; } }
 .spy-viewer-stage { position: relative; overflow: hidden; cursor: grab; touch-action: none; user-select: none; }
 .spy-viewer-stage:focus-visible { outline: 2px solid var(--ochre); outline-offset: -2px; }
 .spy-viewer-stage.is-dragging { cursor: grabbing; }

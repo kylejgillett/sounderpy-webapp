@@ -18,10 +18,17 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></svg>
         <span>Copy</span>
       </button>
-      <a class="spy-viewer-download" download="sounderpy_plot.png" title="Download PNG">
+      <a class="spy-viewer-download" download="sounderpy_plot.png" title="Download PNG image">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19.5h14" /></svg>
-        <span>PNG</span>
+        PNG
       </a>
+      {[["csv", "CSV", "profile data"], ["sharppy", "SHARPpy", "input file"], ["cm1", "CM1", "input sounding"]].map(([type, label, note]) => (
+        <button type="button" data-download={type} title={`Download ${label} ${note}`}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19.5h14" /></svg>
+          {label}
+        </button>
+      ))}
+      <span class="spy-viewer-gap"></span>
       <button type="button" data-viewer="close" aria-label="Close viewer" title="Close (Esc)">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
       </button>
