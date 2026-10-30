@@ -36,6 +36,8 @@
   display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(300px, 1fr); gap: 1.4rem; padding: 1.4rem;
   border: 1px solid var(--line); border-radius: 8px; background: rgb(69 65 58 / 55%); box-shadow: var(--shadow-soft);
 }
+.spy-experimental { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; margin: 0; color: var(--ink-soft); font-size: .92rem; }
+.spy-experimental b { padding: .1rem .55rem; border: 1px solid var(--ochre); border-radius: 999px; color: var(--ochre); font-size: .78rem; letter-spacing: .05em; text-transform: uppercase; }
 .spy-composite-main { display: flex; flex-direction: column; gap: .75rem; min-width: 0; }
 .spy-composite-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
 .spy-composite-head h3 { margin: 0; color: var(--forest-deep); font-family: var(--serif); font-size: 1.3rem; font-weight: 600; }
@@ -236,6 +238,9 @@
 .spy-result[data-state="loading"] img { opacity: .3; }
 
 .spy-downloads { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .75rem; }
+/* A composite has no single data file or share link: just PNG and Copy */
+.spy[data-result="composite"] :is(.spy-caption-actions, button[data-download]) { display: none; }
+.spy[data-result="composite"] .spy-downloads { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .spy-download {
   display: flex; align-items: center; justify-content: center; gap: .75rem; min-height: 4rem; padding: .7rem 1rem;
   border: 1px solid var(--control-border); border-radius: 8px; background: var(--control-bg);

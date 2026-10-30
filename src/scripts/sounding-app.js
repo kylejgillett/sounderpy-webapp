@@ -31,6 +31,7 @@ async function api(path, body) {
 
 function setBusy(busy, message = "") {
   $$(".spy-panel .spy-submit, [data-action], [data-download]").forEach((el) => el.toggleAttribute("disabled", busy));
+  $("[data-build-composite]").disabled = busy || profiles.length < MIN_PROFILES;
   status.textContent = message;
   status.classList.remove("is-error");
 }
@@ -114,6 +115,7 @@ const SOURCE_NAMES = {
   acars: "Aircraft profile · ACARS",
   bufkit: "Model forecast · BUFKIT",
   reanalysis: "Model reanalysis · RAP-RUC",
+  composite: "Composite soundings · Experimental",
 };
 const pad2 = (v) => String(v).padStart(2, "0");
 const titleCase = (s) => (s && s === s.toUpperCase() && s.length > 3
@@ -129,6 +131,7 @@ function describeRequest(req) {
     acars: ["ACARS", req.profile, when],
     bufkit: [req.model?.toUpperCase(), req.site?.toUpperCase(), `F${pad2(req.fcst_hr)}`, req.hour ? `run ${when}` : "latest run"],
     reanalysis: ["RAP-RUC", req.lat != null ? coords(req.lat, req.lon) : "", when],
+    composite: [`Composite of ${req.profiles?.length} soundings`],
   }[req.source];
   if (req.settings.hodo) parts.push("hodograph");
   return parts.filter(Boolean).join("  ·  ");
@@ -155,6 +158,7 @@ function settingsSummary(s) {
 }
 
 function loadingHint(req) {
+  if (req.source === "composite") return "Each profile is fetched separately, so this can take a minute.";
   if (req.source === "reanalysis") return "Reanalysis data can take a minute or more.";
   if (req.settings.ecape || req.settings.radar) return "ECAPE and radar maps add extra time.";
   return "Usually 5–30 seconds.";
@@ -166,7 +170,10 @@ function startLoading(req) {
   const elapsed = $(".spy-elapsed");
   const hint = $(".spy-loading-hint");
   $(".spy-loading-request").textContent = describeRequest(req);
-  $(".spy-loading-settings").replaceChildren(...settingsSummary(req.settings).map((text) => {
+  const chips = req.source === "composite"
+    ? req.profiles.map((p, i) => `${String.fromCharCode(65 + i)}: ${describeRequest({ ...p, settings: {} })}`)
+    : settingsSummary(req.settings);
+  $(".spy-loading-settings").replaceChildren(...chips.map((text) => {
     const li = document.createElement("li");
     li.textContent = text;
     return li;
@@ -231,6 +238,7 @@ function clearResult() {
   clearInterval(timer);
   lastRequest = null;
   lastShareUrl = null;
+  delete $(".spy").dataset.result;
   const img = $("img", result);
   img.removeAttribute("src");
   img.alt = "";
@@ -250,14 +258,16 @@ function getSounding(form) {
 // `record` adds the sounding to the address bar and browser history (see shareable links below).
 async function runSounding(req, { record = false } = {}) {
   const id = ++requestId;
-  const shareUrl = requestUrl(req); // captured now, so later setting changes don't alter it
+  const isComposite = req.source === "composite";
+  const shareUrl = isComposite ? null : requestUrl(req); // captured now, so later setting changes don't alter it
   setBusy(true);
   startLoading(req);
   result.scrollIntoView({ behavior: "smooth", block: "nearest" });
   try {
-    const { label, info, image } = await (await api("/api/sounding", req)).json();
+    const { label, info, image } = await (await api(isComposite ? "/api/composite" : "/api/sounding", req)).json();
     if (id !== requestId) return;
     lastRequest = req;
+    $(".spy").dataset.result = isComposite ? "composite" : "sounding"; // composites hide data-file downloads
     renderCaption(req, label, info);
     const img = $("img", result);
     img.src = image;
@@ -270,7 +280,7 @@ async function runSounding(req, { record = false } = {}) {
   } catch (err) {
     if (id !== requestId) return;
     stopLoading();
-    showError(err, "Couldn't get that sounding");
+    showError(err, isComposite ? "Couldn't build that composite" : "Couldn't get that sounding");
   }
 }
 
@@ -505,7 +515,6 @@ $(".spy-image-link").addEventListener("click", () => {
 });
 
 // ---- Composite tab: the profile list and Add profile pop-up -------------------------
-// Front end only for now: Build composite doesn't contact the server yet.
 
 const MAX_PROFILES = 8, MIN_PROFILES = 2;
 const profileDialog = $(".spy-profile-dialog");
@@ -602,14 +611,14 @@ function lineControls(style) {
   return box;
 }
 
-// What the server side will receive; names match SounderPy's build_composite arguments.
+// The /api/composite request; names match SounderPy's build_composite arguments. Always dark mode on the server.
 function compositeRequest() {
   const options = $(".spy-composite-options");
   const cmap = options.querySelector('[name="cmap"]').value;
   return {
+    source: "composite",
     profiles: profiles.map(({ style, ...request }) => request),
     settings: {
-      dark_mode: true,
       shade_between: options.querySelector('[name="shade_between"]').checked,
       ...(cmap === "custom" ? { colors_to_use: profiles.map((p) => p.style.color) } : { cmap }),
       ls_to_use: profiles.map((p) => p.style.ls),
@@ -625,7 +634,7 @@ function renderProfiles() {
   $(".spy-profile-empty").hidden = profiles.length > 0;
   $("[data-add-profile]").disabled = full;
   $("[data-build-composite]").disabled = profiles.length < MIN_PROFILES;
-  $('[data-tab="composite"]').textContent = profiles.length ? `Composite (${profiles.length})` : "Composite";
+  $('[data-tab="composite"]').textContent = profiles.length ? `Composite soundings (${profiles.length})` : "Composite soundings";
 
   const action = (label, handler, disabled = false) => {
     const button = document.createElement("button");
@@ -677,11 +686,7 @@ $$("[data-profile-type]").forEach((b) => b.addEventListener("click", () => borro
 $('.spy-composite-options [name="cmap"]').addEventListener("change", (e) => {
   $(".spy-profile-list").classList.toggle("is-custom", e.target.value === "custom");
 });
-$("[data-build-composite]").addEventListener("click", () => {
-  const request = compositeRequest();
-  console.info("Composite request (server side not connected yet):", request);
-  showError(new Error(`The server side of composites isn't connected yet, so these ${request.profiles.length} profiles can't be plotted.`), "Composite preview");
-});
+$("[data-build-composite]").addEventListener("click", () => runSounding(compositeRequest()));
 renderProfiles();
 
 // ---- Shareable links and saved settings -------------------------------------------

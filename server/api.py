@@ -13,6 +13,7 @@ import re
 import threading
 import time
 import datetime as dt
+from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -113,6 +114,25 @@ class SoundingRequest(BaseModel):
     lon: Optional[float] = None
     date: Optional[dt.date] = None
     hour: Optional[str] = None
+
+
+MAX_COMPOSITE_PROFILES = 8
+COMPOSITE_FETCH_WORKERS = 4  # fetched side by side; drawing still takes turns under PLOT_LOCK
+
+
+class CompositeSettings(BaseModel):
+    """Names match SounderPy's build_composite. The style lists hold one entry per profile."""
+    shade_between: bool = True
+    cmap: Literal["viridis", "plasma", "cividis", "turbo", "coolwarm"] = "viridis"
+    colors_to_use: Optional[list[str]] = None
+    ls_to_use: Optional[list[Literal["-", "--", ":", "-."]]] = None
+    lw_to_use: Optional[list[float]] = None
+    alphas_to_use: Optional[list[float]] = None
+
+
+class CompositeRequest(BaseModel):
+    profiles: list[SoundingRequest]
+    settings: CompositeSettings = Field(default_factory=CompositeSettings)
 
 
 # -----------------------------------------------------------------------------
@@ -362,6 +382,48 @@ def _render_png(clean_data, s):
         return output.read_bytes()
 
 
+def _render_composite(data_list, s):
+    """Render a composite of several profiles and return the PNG bytes. Always dark mode."""
+    with TemporaryDirectory(prefix="sounderpy_composite_") as tmpdir:
+        output = Path(tmpdir) / "composite.png"
+
+        with PLOT_LOCK:
+            try:
+                spy.build_composite(
+                    data_list,
+                    shade_between=s.shade_between,
+                    cmap=s.cmap,
+                    colors_to_use=s.colors_to_use or "none",
+                    ls_to_use=s.ls_to_use or "none",
+                    lw_to_use=s.lw_to_use or "none",
+                    alphas_to_use=s.alphas_to_use or "none",
+                    dark_mode=True,
+                    save=True,
+                    filename=str(output),
+                )
+            finally:
+                plt.close("all")
+
+        return output.read_bytes()
+
+
+def _check_composite(req):
+    count = len(req.profiles)
+    if not 2 <= count <= MAX_COMPOSITE_PROFILES:
+        raise HTTPException(422, f"A composite needs 2 to {MAX_COMPOSITE_PROFILES} profiles; this request has {count}.")
+
+    s = req.settings
+    for values in (s.colors_to_use, s.ls_to_use, s.lw_to_use, s.alphas_to_use):
+        if values is not None and len(values) != count:
+            raise HTTPException(422, "Each line style list needs one entry per profile.")
+    if s.colors_to_use and not all(re.fullmatch(r"#[0-9a-fA-F]{6}", c) for c in s.colors_to_use):
+        raise HTTPException(422, "Line colors must be hex values like #e8c468.")
+    if s.lw_to_use and not all(0.5 <= w <= 10 for w in s.lw_to_use):
+        raise HTTPException(422, "Line widths must be between 0.5 and 10.")
+    if s.alphas_to_use and not all(0 < a <= 1 for a in s.alphas_to_use):
+        raise HTTPException(422, "Line opacity must be between 0 and 1.")
+
+
 def _export_file(clean_data, file_type):
     """Export SounderPy data to text. Returns (bytes, filename, content type)."""
     suffix, content_type = EXPORTS[file_type]
@@ -505,5 +567,43 @@ def sounding(req: SoundingRequest):
     return {
         "label": label,
         "info": _sounding_info(clean_data, req.source),
+        "image": "data:image/png;base64," + base64.b64encode(png).decode("ascii"),
+    }
+
+
+@app.post("/api/composite")
+def composite(req: CompositeRequest):
+    """Fetch every profile, then return one composite plot as JSON ({label, image})."""
+    _check_composite(req)
+    started = time.time()
+
+    def fetch(profile):
+        # Returns (data, None) or (None, error), so one failure can be reported by its letter.
+        try:
+            return _load_data(profile)[0], None
+        except HTTPException as exc:
+            return None, exc.detail
+        # SounderPy calls sys.exit() for some bad inputs, so catch SystemExit too.
+        except (Exception, SystemExit) as exc:
+            LOGGER.exception("Composite data retrieval failed for %s", profile.model_dump(exclude={"settings"}))
+            return None, _friendly_error(profile, exc)
+
+    with ThreadPoolExecutor(max_workers=COMPOSITE_FETCH_WORKERS) as pool:
+        results = list(pool.map(fetch, req.profiles))
+
+    problems = [f"Profile {chr(65 + i)}: {error}" for i, (_, error) in enumerate(results) if error]
+    if problems:
+        raise HTTPException(502, " ".join(problems))
+
+    try:
+        png = _render_composite([data for data, _ in results], req.settings)
+    except (Exception, SystemExit):
+        LOGGER.exception("Composite rendering failed for %s", req.model_dump())
+        raise HTTPException(500, "The data loaded, but SounderPy couldn't draw this composite. Try removing a very short or incomplete profile.")
+
+    LOGGER.info("composite of %d served in %.1fs", len(req.profiles), time.time() - started)
+    return {
+        "label": f"Composite of {len(req.profiles)} soundings",
+        "info": None,
         "image": "data:image/png;base64," + base64.b64encode(png).decode("ascii"),
     }
