@@ -80,7 +80,7 @@ button, input, textarea, select { font: inherit; }
 .brand {
   color: var(--forest-deep);
   font-family: var(--serif);
-  font-size: clamp(1.7rem, 2vw, 1.9rem);
+  font-size: clamp(2.4rem, 3.2vw, 3.2rem);
   font-weight: 700;
   letter-spacing: -.035em;
   line-height: 1.1;
