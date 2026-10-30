@@ -14,6 +14,8 @@
 .spy-health[data-state="online"] .spy-health-dot { background: #9cc17f; box-shadow: 0 0 0 3px rgb(156 193 127 / 18%); }
 .spy-health[data-state="offline"] .spy-health-dot { background: #e48d70; box-shadow: 0 0 0 3px rgb(228 141 112 / 18%); }
 .spy-health[data-state="offline"] .spy-health-text { color: #f0a58a; }
+.spy-statusbar .spy-moved { display: block; color: var(--ink); text-align: center; }
+.spy-moved strong { color: var(--ochre); }
 .spy-utc { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 .spy a { color: var(--forest); text-underline-offset: 3px; }
 
@@ -151,10 +153,10 @@
 .spy-settings-x { display: grid; place-items: center; width: 2.6rem; height: 2.6rem; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--ink-soft); cursor: pointer; }
 .spy-settings-x:hover { background: var(--control-bg-hover); color: var(--ink); }
 .spy-settings-x svg { width: 1.3rem; height: 1.3rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
-.spy-settings-form { display: flex; flex-direction: column; min-height: 0; }
+.spy-settings-form { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
 .spy-settings-note { margin: 0; color: var(--ochre); font-size: .85rem; line-height: 1.45; }
 .spy-settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.25rem; min-height: 0; padding: 1.25rem 1.4rem; overflow-y: auto; }
-.spy-settings-actions { display: flex; justify-content: space-between; gap: .75rem; padding: .9rem 1.4rem; border-top: 1px solid var(--line); }
+.spy-settings-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; padding: .9rem 1.4rem; border-top: 1px solid var(--line); }
 .spy-settings-actions button { justify-content: center; min-height: 2.9rem; }
 .spy-settings-done { min-width: 7rem; border-color: var(--ochre); background: var(--forest); color: var(--paper); }
 .spy-settings-done:hover { background: var(--forest-deep); }

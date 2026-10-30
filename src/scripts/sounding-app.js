@@ -401,9 +401,9 @@ async function initMap(form) {
 
 // Where each data source comes from (shown under the sounding).
 const CREDITS = {
-  raob: "Observed soundings: University of Wyoming upper-air archive (IGRA v2 from NOAA NCEI for IGRA station IDs).",
+  raob: "Observed soundings: University of Wyoming upper-air archive and IGRAv2 from NOAA.",
   acars: "Aircraft profiles: ACARS/AMDAR data from the University of Oklahoma SHARP archive.",
-  bufkit: "Forecast soundings: Penn State BUFKIT feed, with past runs from the Iowa Environmental Mesonet archive.",
+  bufkit: "Forecast soundings: Penn State BUFKIT feed and Iowa State IEM BUFKIT feed.",
   reanalysis: "Reanalysis: RAP and RUC model analyses from NOAA NCEI.",
   composite: "Composites combine the data sources of the profiles you add.",
 };
@@ -805,13 +805,16 @@ function applySettings(pairs) {
   updateSettingsCount();
 }
 
+// Saved settings exist only while "Remember my settings" is on (even an empty list counts).
+const rememberBox = $("[data-remember-settings]");
 function saveSettings() {
   try {
-    const changed = changedSettings();
-    if (changed.length) localStorage.setItem(SAVED_SETTINGS, JSON.stringify(changed));
+    if (rememberBox.checked) localStorage.setItem(SAVED_SETTINGS, JSON.stringify(changedSettings()));
     else localStorage.removeItem(SAVED_SETTINGS);
   } catch { /* private mode or storage blocked: settings just aren't remembered */ }
 }
+rememberBox.addEventListener("change", saveSettings);
+try { rememberBox.checked = localStorage.getItem(SAVED_SETTINGS) !== null; } catch { /* storage blocked */ }
 
 function savedSettings() {
   try { return JSON.parse(localStorage.getItem(SAVED_SETTINGS)) ?? []; } catch { return []; }
