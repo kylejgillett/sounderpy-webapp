@@ -72,6 +72,7 @@ function readSettings() {
     color_blind: f("color_blind").checked,
     ecape: f("ecape").checked,
     hodo: f("hodo").checked,
+    sr_hodo: f("sr_hodo").checked,
     hodo_boundary_angle: num(f("hodo_boundary_angle").value),
     map_zoom: num(f("map_zoom").value) ?? 0,
     radar: f("radar").value || null,
@@ -149,6 +150,7 @@ function settingsSummary(s) {
     !s.color_blind && "Standard colors (color-blind mode off)",
     s.ecape && "ECAPE parcel path",
     s.hodo && "Hodograph only",
+    s.sr_hodo && (s.hodo ? "Storm-relative hodograph" : "Storm-relative (hodograph-only plots)"),
     s.hodo_boundary_angle != null && `Boundary axis at ${s.hodo_boundary_angle}°`,
     s.map_zoom !== 0 && `Map zoom ${s.map_zoom}`,
     s.radar && `Radar: ${{ "single-site": "NEXRAD site", mosaic: "MRMS mosaic" }[s.radar]}${s.radar_time ? ` at ${s.radar_time.replace("T", " ")} UTC` : ""}`,
@@ -458,6 +460,8 @@ for (const name of ["airport", "hour"]) {
 // "Customize figure": show how many settings differ from the defaults, and allow a reset.
 const settingsForm = $(".spy-settings-form");
 function updateSettingsCount() {
+  // build_sounding has no sr_hodo yet, so say when the option won't apply.
+  $("[data-sr-note]").hidden = !(settingsForm.elements.namedItem("sr_hodo").checked && !settingsForm.elements.namedItem("hodo").checked);
   const n = settingsSummary(readSettings()).length;
   for (const badge of $$(".spy-settings-count")) {
     badge.textContent = `${n} change${n === 1 ? "" : "s"}`;

@@ -16,7 +16,17 @@
         <label class="spy-check"><input type="checkbox" name="dark_mode" />Dark mode</label>
         <label class="spy-check"><input type="checkbox" name="color_blind" checked />Color-blind friendly</label>
         <label class="spy-check"><input type="checkbox" name="ecape" />Add ECAPE parcel path (slower)</label>
+      </fieldset>
+      <fieldset>
+        <legend>Hodograph settings</legend>
         <label class="spy-check"><input type="checkbox" name="hodo" />Plot hodograph only</label>
+        <label class="spy-check"><input type="checkbox" name="sr_hodo" />Storm-relative hodograph</label>
+        <p class="spy-settings-note" data-sr-note hidden>Storm-relative applies to hodograph-only plots for now. Full soundings stay ground-relative.</p>
+        <label>Storm motion<select name="storm_motion"><option value="right_moving">Right mover</option><option value="left_moving">Left mover</option><option value="mean_wind">Mean wind</option></select></label>
+        <div class="spy-pair">
+          <label>Custom direction<input name="sm_dir" type="number" placeholder="deg" /></label>
+          <label>Custom speed<input name="sm_spd" type="number" placeholder="kts" /></label>
+        </div>
         <label>Hodograph boundary angle<input name="hodo_boundary_angle" type="number" placeholder="degrees, e.g. 45" /></label>
       </fieldset>
       <fieldset>
@@ -26,13 +36,7 @@
         <label>Radar time (UTC)<input name="radar_time" type="datetime-local" title="Leave blank to use the sounding time" /></label>
       </fieldset>
       <fieldset>
-        <legend>Custom storm motion &amp; surface</legend>
-        <label>Storm motion<select name="storm_motion"><option value="right_moving">Right mover</option><option value="left_moving">Left mover</option><option value="mean_wind">Mean wind</option></select></label>
-        <div class="spy-pair">
-          <label>Custom direction<input name="sm_dir" type="number" placeholder="deg" /></label>
-          <label>Custom speed<input name="sm_spd" type="number" placeholder="kts" /></label>
-        </div>
-        <span class="spy-sub">Modify surface values</span>
+        <legend>Modify surface values</legend>
         <div class="spy-pair spy-quad">
           <label>T<input name="sfc_T" type="number" step="any" placeholder="°C" /></label>
           <label>Td<input name="sfc_Td" type="number" step="any" placeholder="°C" /></label>

@@ -89,6 +89,7 @@ class Settings(BaseModel):
     color_blind: bool = True
     dark_mode: bool = False
     hodo: bool = False
+    sr_hodo: bool = False  # hodograph-only for now: build_sounding in SounderPy 3.2.0 has no sr_hodo
     storm_motion: Union[str, list[float]] = "right_moving"
     modify_sfc: Optional[dict[str, float]] = None
     ecape: bool = False
@@ -368,7 +369,7 @@ def _render_png(clean_data, s):
         with PLOT_LOCK:
             try:
                 if s.hodo:
-                    spy.build_hodograph(clean_data, filename=str(output), **common)
+                    spy.build_hodograph(clean_data, sr_hodo=s.sr_hodo, filename=str(output), **common)
                 else:
                     spy.build_sounding(
                         clean_data,
