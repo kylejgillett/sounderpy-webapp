@@ -595,6 +595,22 @@ function renderProfiles() {
   }));
 }
 
+// "Use in a composite" on a finished sounding: add it to the list and go to the Composite tab.
+$("[data-use-in-composite]").addEventListener("click", () => {
+  if (!lastRequest) return;
+  const { settings, ...request } = lastRequest;
+  const summary = describeRequest({ ...request, settings: {} });
+  const existing = profiles.findIndex((p) => describeRequest({ ...p, settings: {} }) === summary);
+  if (existing < 0 && profiles.length >= MAX_PROFILES) {
+    return showError(new Error(`The composite already has ${MAX_PROFILES} profiles. Remove one to add this sounding.`), "Composite is full");
+  }
+  if (existing < 0) profiles.push(request);
+  borrowedSource = request.source;
+  renderProfiles();
+  showTab("composite");
+  $("[data-composite]").scrollIntoView({ behavior: "smooth", block: "nearest" });
+});
+
 $("[data-add-profile]").addEventListener("click", () => openProfileDialog());
 $("[data-close-profile]").addEventListener("click", () => profileDialog.close());
 profileDialog.addEventListener("click", (e) => { if (e.target === profileDialog) profileDialog.close(); }); // backdrop

@@ -16,10 +16,16 @@ const downloads = [
       <h2 class="spy-title"></h2>
       <p class="spy-meta"></p>
     </div>
-    <button class="spy-secondary spy-share" type="button" data-copy-link>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1" /><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1" /></svg>
-      <span>Copy link</span>
-    </button>
+    <div class="spy-caption-actions">
+      <button class="spy-secondary spy-share" type="button" data-use-in-composite>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+        <span>Use in a composite</span>
+      </button>
+      <button class="spy-secondary spy-share" type="button" data-copy-link>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1" /><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1" /></svg>
+        <span>Copy link</span>
+      </button>
+    </div>
   </header>
 
   <div class="spy-frame">
