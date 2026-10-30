@@ -49,6 +49,12 @@
 .spy-profile-list div { display: flex; flex-wrap: wrap; gap: .3rem; }
 .spy-profile-list button { padding: .3rem .55rem; border: 1px solid var(--line); border-radius: 5px; background: none; color: var(--ink-soft); font-size: .85rem; cursor: pointer; }
 .spy-profile-list button:hover:not([disabled]) { border-color: var(--control-border); color: var(--ink); }
+.spy-profile-list .spy-profile-style { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: .5rem .9rem; }
+.spy .spy-profile-style label { display: flex; align-items: center; gap: .4rem; font-size: .82rem; }
+.spy .spy-profile-style select { width: auto; min-height: 2.2rem; padding: .15rem .4rem; font-size: .85rem; }
+.spy .spy-profile-style input[type="color"] { width: 2.4rem; min-height: 2.2rem; padding: .1rem; cursor: pointer; }
+.spy .spy-profile-style .spy-profile-color { display: none; }
+.spy .is-custom .spy-profile-style .spy-profile-color { display: flex; }
 .spy-profile-add { align-self: flex-start; }
 .spy-composite-options { display: grid; gap: .8rem; }
 
@@ -307,7 +313,7 @@
 @media (max-width: 820px) {
   .spy-panel, .spy-composite { grid-template-columns: 1fr; }
   .spy-profile-list li { grid-template-columns: auto minmax(0, 1fr); }
-  .spy-profile-list div { grid-column: 1 / -1; }
+  .spy-profile-list div, .spy-profile-list .spy-profile-style { grid-column: 1 / -1; }
   .spy-profile-slot .spy-map { min-height: 280px; }
   .spy-map { min-height: 360px; }
 }

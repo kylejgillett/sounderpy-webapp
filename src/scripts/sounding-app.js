@@ -510,7 +510,15 @@ $(".spy-image-link").addEventListener("click", () => {
 const MAX_PROFILES = 8, MIN_PROFILES = 2;
 const profileDialog = $(".spy-profile-dialog");
 const profileSlot = $(".spy-profile-slot");
-const profiles = [];   // regular requests, without figure settings
+const profiles = [];   // regular requests, without figure settings, each with a line `style`
+// Line defaults match SounderPy's build_composite. Custom colors only apply when chosen under Line colors.
+const LINE_COLORS = ["#e8c468", "#6fb3a8", "#e2876a", "#a7c957", "#c58fd6", "#7fb2e5", "#f3ead6", "#d96c75"];
+const LINE_STYLES = [["-", "Solid"], ["--", "Dashed"], [":", "Dotted"], ["-.", "Dash-dot"]];
+const LINE_WIDTHS = [1, 2, 3, 4, 5, 6].map((w) => [w, String(w)]);
+const LINE_OPACITIES = [[1, "100%"], [0.75, "75%"], [0.5, "50%"], [0.25, "25%"]];
+const nextLineColor = () => LINE_COLORS.find((c) => !profiles.some((p) => p.style.color === c)) ?? LINE_COLORS[profiles.length % LINE_COLORS.length];
+const newLineStyle = () => ({ ls: "-", lw: 3, alpha: 1, color: nextLineColor() });
+let pendingStyle = null; // line style carried over when duplicating a row
 let editingIndex = null; // the row being edited, or null when adding a new profile
 let borrowedForm = null;
 
@@ -543,6 +551,7 @@ function returnForm() {
 
 function openProfileDialog({ index = null, request = null } = {}) {
   editingIndex = index;
+  pendingStyle = request?.style ?? null;
   $("#spy-profile-title").textContent = index === null ? "Add a profile" : `Edit profile ${String.fromCharCode(65 + index)}`;
   profileDialog.showModal();
   borrowForm(request?.source ?? borrowedSource);
@@ -556,10 +565,58 @@ function saveProfile(form) {
   try { request = buildRequest(form); } catch (err) { return showError(err, "Check this profile"); }
   delete request.settings;
   borrowedSource = request.source;
-  if (editingIndex === null) profiles.push(request);
-  else profiles[editingIndex] = request;
+  if (editingIndex === null) {
+    request.style = pendingStyle ? { ...pendingStyle, color: nextLineColor() } : newLineStyle();
+    profiles.push(request);
+  } else {
+    request.style = profiles[editingIndex].style;
+    profiles[editingIndex] = request;
+  }
   profileDialog.close();
   renderProfiles();
+}
+
+// One row's line controls. They edit the profile's style in place, so the list isn't redrawn.
+function lineControls(style) {
+  const box = document.createElement("div");
+  box.className = "spy-profile-style";
+  const select = (label, key, options) => {
+    const wrap = document.createElement("label");
+    const input = document.createElement("select");
+    input.setAttribute("aria-label", label);
+    input.append(...options.map(([value, text]) => new Option(text, value)));
+    input.value = style[key];
+    input.addEventListener("change", () => { style[key] = key === "ls" ? input.value : Number(input.value); });
+    wrap.append(label, input);
+    return wrap;
+  };
+  const color = document.createElement("label");
+  const picker = document.createElement("input");
+  color.className = "spy-profile-color";
+  picker.type = "color";
+  picker.value = style.color;
+  picker.setAttribute("aria-label", "Line color");
+  picker.addEventListener("input", () => { style.color = picker.value; });
+  color.append("Color", picker);
+  box.append(color, select("Style", "ls", LINE_STYLES), select("Width", "lw", LINE_WIDTHS), select("Opacity", "alpha", LINE_OPACITIES));
+  return box;
+}
+
+// What the server side will receive; names match SounderPy's build_composite arguments.
+function compositeRequest() {
+  const options = $(".spy-composite-options");
+  const cmap = options.querySelector('[name="cmap"]').value;
+  return {
+    profiles: profiles.map(({ style, ...request }) => request),
+    settings: {
+      dark_mode: true,
+      shade_between: options.querySelector('[name="shade_between"]').checked,
+      ...(cmap === "custom" ? { colors_to_use: profiles.map((p) => p.style.color) } : { cmap }),
+      ls_to_use: profiles.map((p) => p.style.ls),
+      lw_to_use: profiles.map((p) => p.style.lw),
+      alphas_to_use: profiles.map((p) => p.style.alpha),
+    },
+  };
 }
 
 function renderProfiles() {
@@ -568,6 +625,7 @@ function renderProfiles() {
   $(".spy-profile-empty").hidden = profiles.length > 0;
   $("[data-add-profile]").disabled = full;
   $("[data-build-composite]").disabled = profiles.length < MIN_PROFILES;
+  $('[data-tab="composite"]').textContent = profiles.length ? `Composite (${profiles.length})` : "Composite";
 
   const action = (label, handler, disabled = false) => {
     const button = document.createElement("button");
@@ -590,7 +648,7 @@ function renderProfiles() {
       action("Duplicate", () => openProfileDialog({ request }), full),
       action("Remove", () => { profiles.splice(i, 1); renderProfiles(); }),
     );
-    row.append(letter, text, actions);
+    row.append(letter, text, actions, lineControls(request.style));
     return row;
   }));
 }
@@ -604,7 +662,7 @@ $("[data-use-in-composite]").addEventListener("click", () => {
   if (existing < 0 && profiles.length >= MAX_PROFILES) {
     return showError(new Error(`The composite already has ${MAX_PROFILES} profiles. Remove one to add this sounding.`), "Composite is full");
   }
-  if (existing < 0) profiles.push(request);
+  if (existing < 0) profiles.push({ ...request, style: newLineStyle() });
   borrowedSource = request.source;
   renderProfiles();
   showTab("composite");
@@ -616,10 +674,14 @@ $("[data-close-profile]").addEventListener("click", () => profileDialog.close())
 profileDialog.addEventListener("click", (e) => { if (e.target === profileDialog) profileDialog.close(); }); // backdrop
 profileDialog.addEventListener("close", () => { borrowedSource = borrowedForm?.dataset.source ?? borrowedSource; returnForm(); });
 $$("[data-profile-type]").forEach((b) => b.addEventListener("click", () => borrowForm(b.dataset.profileType)));
-$("[data-build-composite]").addEventListener("click", () => showError(
-  new Error(`The server side of composites isn't connected yet, so these ${profiles.length} profiles can't be plotted.`),
-  "Composite preview",
-));
+$('.spy-composite-options [name="cmap"]').addEventListener("change", (e) => {
+  $(".spy-profile-list").classList.toggle("is-custom", e.target.value === "custom");
+});
+$("[data-build-composite]").addEventListener("click", () => {
+  const request = compositeRequest();
+  console.info("Composite request (server side not connected yet):", request);
+  showError(new Error(`The server side of composites isn't connected yet, so these ${request.profiles.length} profiles can't be plotted.`), "Composite preview");
+});
 renderProfiles();
 
 // ---- Shareable links and saved settings -------------------------------------------

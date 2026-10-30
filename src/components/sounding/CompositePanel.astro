@@ -23,9 +23,8 @@ const schemes = ["Viridis", "Plasma", "Cividis", "Turbo", "Coolwarm"];
   <div class="spy-side">
     <p class="spy-hint">Overlay up to 8 soundings on one Skew-T and hodograph. Mix any data types, sites, and times.</p>
     <div class="spy-composite-options">
-      <label class="spy-check"><input type="checkbox" name="dark_mode" />Dark mode</label>
       <label class="spy-check"><input type="checkbox" name="shade_between" checked />Shade between temperature and dewpoint</label>
-      <label>Color scheme<select name="cmap">{schemes.map((s) => <option value={s.toLowerCase()}>{s}</option>)}</select></label>
+      <label>Line colors<select name="cmap">{schemes.map((s) => <option value={s.toLowerCase()}>{s}</option>)}<option value="custom">Custom (choose per profile)</option></select></label>
     </div>
     <div class="spy-actions">
       <button class="spy-submit" type="button" data-build-composite disabled><span>Build composite</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m0 0-5-5m5 5-5 5" /></svg></button>
