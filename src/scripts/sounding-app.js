@@ -516,7 +516,7 @@ $(".spy-image-link").addEventListener("click", () => {
 
 // ---- Composite tab: the profile list and Add profile pop-up -------------------------
 
-const MAX_PROFILES = 8, MIN_PROFILES = 2;
+const MAX_PROFILES = 6, MIN_PROFILES = 2;
 const profileDialog = $(".spy-profile-dialog");
 const profileSlot = $(".spy-profile-slot");
 const profiles = [];   // regular requests, without figure settings, each with a line `style`
@@ -545,6 +545,8 @@ function borrowForm(source) {
   form.hidden = false;
   $(".spy-submit span", form).textContent = editingIndex === null ? "Add to composite" : "Save profile";
   borrowedForm = form;
+  // A timeseries makes new rows, so it isn't offered while editing one row.
+  $$("[data-forecast-series]", form).forEach((b) => { b.hidden = editingIndex !== null; });
   $$("[data-profile-type]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.profileType === source)));
   initMap(form);
   return form;
@@ -553,6 +555,7 @@ function borrowForm(source) {
 function returnForm() {
   if (!borrowedForm) return;
   $(".spy-submit span", borrowedForm).textContent = "Get sounding";
+  $$("[data-forecast-series]", borrowedForm).forEach((b) => { b.hidden = false; });
   borrowedForm.hidden = true;
   formHomes.get(borrowedForm).after(borrowedForm);
   borrowedForm = null;
@@ -674,6 +677,78 @@ $("[data-use-in-composite]").addEventListener("click", () => {
   }
   if (existing < 0) profiles.push({ ...request, style: newLineStyle() });
   borrowedSource = request.source;
+  renderProfiles();
+  showTab("composite");
+  $("[data-composite]").scrollIntoView({ behavior: "smooth", block: "nearest" });
+});
+
+// ---- Forecast timeseries: many forecast hours of one BUFKIT site and run ----------
+
+const FORECAST_LIMITS = { gfs: 180, hrrr: 48, rap: 51, nam: 84, namnest: 60, sref: 84, hiresw: 48 }; // from SounderPy
+const seriesDialog = $(".spy-series");
+const seriesField = (name) => $(`.spy-series [name="${name}"]`);
+const seriesMode = () => $('.spy-series [name="series_mode"]:checked').value;
+let seriesBase = null; // the BUFKIT request, without a forecast hour
+
+// The forecast hours asked for, or the reason they can't be used.
+function seriesPlan() {
+  const [from, to, every] = ["series_from", "series_to", "series_every"].map((n) => Number(seriesField(n).value));
+  const filled = ["series_from", "series_to", "series_every"].every((n) => seriesField(n).value !== "");
+  if (!filled || ![from, to, every].every(Number.isInteger) || from < 0 || every < 1) return { error: "Enter whole numbers for the hours and interval." };
+  if (to < from) return { error: "The last forecast hour must come after the first." };
+  const limit = FORECAST_LIMITS[seriesBase.model];
+  if (to > limit) return { error: `The ${seriesBase.model.toUpperCase()} only goes out to F${pad2(limit)}.` };
+  const hours = [];
+  for (let h = from; h <= to; h += every) hours.push(h);
+  if (hours.length > MAX_PROFILES) return { error: `That's ${hours.length} profiles, and the limit is ${MAX_PROFILES}. Widen the interval or shorten the range.` };
+  if (profiles.length && seriesMode() === "add" && profiles.length + hours.length > MAX_PROFILES) {
+    return { error: `That's ${hours.length} profiles, but only ${MAX_PROFILES - profiles.length} more fit. Replace your list or shorten the range.` };
+  }
+  return { hours };
+}
+
+function updateSeries() {
+  const { hours, error } = seriesPlan();
+  const preview = $(".spy-series-preview");
+  preview.textContent = error ?? `${hours.map((h) => `F${pad2(h)}`).join(", ")} (${hours.length} profile${hours.length === 1 ? "" : "s"})`;
+  preview.classList.toggle("is-error", Boolean(error));
+  $("[data-create-series]").disabled = Boolean(error);
+}
+
+function openSeries(form) {
+  let request;
+  try { request = buildRequest(form); } catch (err) { return showError(err, "Check your forecast timeseries"); }
+  if (!request.site?.trim()) return showError(new Error("Choose a BUFKIT site first: click one on the map or type its ID."), "Check your forecast timeseries");
+  const hourText = form.elements.namedItem("hour").value.trim();
+  if (hourText && !request.hour) return showError(new Error(HOUR_MESSAGE), "Check your forecast timeseries");
+  const { settings, fcst_hr, ...base } = request;
+  if (!base.hour) delete base.date; // no run hour means the latest run
+  seriesBase = base;
+  $(".spy-series-source").textContent = [base.model.toUpperCase(), base.site.toUpperCase(), base.hour ? `run ${base.date} ${base.hour}Z` : "latest run"].join("  ·  ");
+  const from = fcst_hr ?? 1;
+  seriesField("series_from").value = from;
+  seriesField("series_every").value = 3;
+  seriesField("series_to").value = Math.min(from + 15, FORECAST_LIMITS[base.model]);
+  $(".spy-series-mode").hidden = profiles.length === 0;
+  $(`.spy-series [name="series_mode"][value="${profiles.length >= MAX_PROFILES ? "replace" : "add"}"]`).checked = true;
+  $('.spy-series [name="series_mode"][value="add"]').disabled = profiles.length >= MAX_PROFILES;
+  seriesDialog.showModal();
+  updateSeries();
+}
+
+$("[data-forecast-series]").addEventListener("click", (e) => openSeries(e.currentTarget.form));
+seriesDialog.addEventListener("input", updateSeries);
+seriesDialog.addEventListener("change", updateSeries);
+seriesDialog.addEventListener("click", (e) => { if (e.target === seriesDialog) seriesDialog.close(); }); // backdrop
+$$("[data-close-series]").forEach((b) => b.addEventListener("click", () => seriesDialog.close()));
+$("[data-create-series]").addEventListener("click", () => {
+  const { hours } = seriesPlan();
+  if (!hours) return;
+  if (seriesMode() === "replace") profiles.length = 0;
+  for (const fcst_hr of hours) profiles.push({ ...seriesBase, fcst_hr, style: newLineStyle() });
+  borrowedSource = "bufkit";
+  seriesDialog.close();
+  if (profileDialog.open) profileDialog.close();
   renderProfiles();
   showTab("composite");
   $("[data-composite]").scrollIntoView({ behavior: "smooth", block: "nearest" });

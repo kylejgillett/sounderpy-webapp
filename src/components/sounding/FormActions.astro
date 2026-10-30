@@ -1,5 +1,7 @@
 ---
 // Bottom of each request form: open the figure settings, then get the sounding.
+// `series` adds the forecast timeseries button (BUFKIT only).
+const { series = false } = Astro.props;
 ---
 <div class="spy-actions">
   <button class="spy-settings-open" type="button" data-open-settings aria-haspopup="dialog">
@@ -7,5 +9,11 @@
     <span>Customize figure</span>
     <span class="spy-settings-count" hidden></span>
   </button>
+  {series && (
+    <button class="spy-settings-open" type="button" data-forecast-series aria-haspopup="dialog">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18c3 0 3-10 6-10s3 7 6 7 2-5 4-5" /><path d="M4 21h16" /></svg>
+      <span>Build a forecast timeseries</span>
+    </button>
+  )}
   <button class="spy-submit" type="submit"><span>Get sounding</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m0 0-5-5m5 5-5 5" /></svg></button>
 </div>

@@ -116,7 +116,7 @@ class SoundingRequest(BaseModel):
     hour: Optional[str] = None
 
 
-MAX_COMPOSITE_PROFILES = 8
+MAX_COMPOSITE_PROFILES = 6
 COMPOSITE_FETCH_WORKERS = 4  # fetched side by side; drawing still takes turns under PLOT_LOCK
 
 
@@ -572,14 +572,9 @@ def sounding(req: SoundingRequest):
     }
 
 
-@app.post("/api/composite")
-def composite(req: CompositeRequest):
-    """Fetch every profile, then return one composite plot as JSON ({label, image})."""
-    _check_composite(req)
-    started = time.time()
-
+def _fetch_profiles(profiles):
+    """Fetch side by side. Returns (data, None) or (None, error) per profile, so failures keep their letter."""
     def fetch(profile):
-        # Returns (data, None) or (None, error), so one failure can be reported by its letter.
         try:
             return _load_data(profile)[0], None
         except HTTPException as exc:
@@ -590,7 +585,44 @@ def composite(req: CompositeRequest):
             return None, _friendly_error(profile, exc)
 
     with ThreadPoolExecutor(max_workers=COMPOSITE_FETCH_WORKERS) as pool:
-        results = list(pool.map(fetch, req.profiles))
+        return list(pool.map(fetch, profiles))
+
+
+def _settle_latest_runs(profiles, results):
+    """Keep "latest run" BUFKIT profiles of one site and model on the same run.
+
+    A new run can appear mid-fetch, which would silently mix two runs on one plot. Mixed groups are
+    fetched again once. Returns (results, name of a group that's still mixed, or None).
+    """
+    results = list(results)
+    groups = {}
+    for i, profile in enumerate(profiles):
+        if profile.source == "bufkit" and not (profile.date and profile.hour) and results[i][0]:
+            groups.setdefault((profile.model.upper(), profile.site.strip().upper()), []).append(i)
+
+    def mixed(indexes):
+        return len({tuple(results[i][0]["site_info"]["run-time"]) for i in indexes if results[i][0]}) > 1
+
+    for (model, site), indexes in groups.items():
+        if not mixed(indexes):
+            continue
+        for i, result in zip(indexes, _fetch_profiles([profiles[i] for i in indexes])):
+            results[i] = result
+        if mixed(indexes):
+            return results, f"the {model} at {site}"
+    return results, None
+
+
+@app.post("/api/composite")
+def composite(req: CompositeRequest):
+    """Fetch every profile, then return one composite plot as JSON ({label, image})."""
+    _check_composite(req)
+    started = time.time()
+
+    results = _fetch_profiles(req.profiles)
+    results, stale = _settle_latest_runs(req.profiles, results)
+    if stale:
+        raise HTTPException(502, f"A new model run is arriving for {stale}, so its profiles came from different runs. Please try again in a few minutes.")
 
     problems = [f"Profile {chr(65 + i)}: {error}" for i, (_, error) in enumerate(results) if error]
     if problems:

@@ -22,7 +22,7 @@ const schemes = ["Viridis", "Plasma", "Cividis", "Turbo", "Coolwarm"];
   </div>
 
   <div class="spy-side">
-    <p class="spy-hint">Overlay up to 8 soundings on one Skew-T and hodograph. Mix any data types, sites, and times.</p>
+    <p class="spy-hint">Overlay up to 6 soundings on one Skew-T and hodograph. Mix any data types, sites, and times.</p>
     <div class="spy-composite-options">
       <label class="spy-check"><input type="checkbox" name="dark_mode" checked />Dark mode</label>
       <label class="spy-check"><input type="checkbox" name="shade_between" checked />Shade between temperature and dewpoint</label>
@@ -45,4 +45,31 @@ const schemes = ["Viridis", "Plasma", "Cividis", "Turbo", "Coolwarm"];
     {types.map(([type, label]) => <button type="button" data-profile-type={type} aria-pressed="false">{label}</button>)}
   </div>
   <div class="spy-profile-slot"></div>
+</dialog>
+
+<dialog class="spy-series" aria-labelledby="spy-series-title">
+  <header class="spy-settings-head">
+    <h2 id="spy-series-title">Build a forecast timeseries</h2>
+    <button class="spy-settings-x" type="button" data-close-series aria-label="Close">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+    </button>
+  </header>
+  <div class="spy-series-body">
+    <p class="spy-series-source"></p>
+    <div class="spy-series-fields">
+      <label>From forecast hour<input name="series_from" type="number" min="0" step="1" /></label>
+      <label>To forecast hour<input name="series_to" type="number" min="0" step="1" /></label>
+      <label>Every (hours)<input name="series_every" type="number" min="1" step="1" /></label>
+    </div>
+    <p class="spy-series-preview" aria-live="polite"></p>
+    <div class="spy-radios spy-series-mode" role="radiogroup" aria-label="Existing profiles">
+      <span>Your list has profiles</span>
+      <label><input type="radio" name="series_mode" value="replace" /><span>Replace them</span></label>
+      <label><input type="radio" name="series_mode" value="add" checked /><span>Add to them</span></label>
+    </div>
+  </div>
+  <div class="spy-settings-actions">
+    <button class="spy-secondary" type="button" data-close-series>Cancel</button>
+    <button class="spy-secondary spy-settings-done" type="button" data-create-series>Create composite</button>
+  </div>
 </dialog>
