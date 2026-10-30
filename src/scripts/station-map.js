@@ -153,12 +153,19 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(
 export function createBaseMap(el, { center = [39, -96], zoom = 4 } = {}) {
   const map = L.map(el, {
     center, zoom, minZoom: 2, maxZoom: 9, preferCanvas: true,
+    // On phones one finger scrolls the page (the map fills the screen width); two fingers move the map.
+    dragging: !L.Browser.mobile,
     zoomSnap: 0.5, wheelPxPerZoomLevel: 90,
     maxBounds: [[-85, -200], [85, 200]], maxBoundsViscosity: 0.8,
   });
   map.attributionControl.addAttribution('Map data: <a href="https://www.naturalearthdata.com/">Natural Earth</a>');
   drawBasemap(map).catch((err) => console.error("Basemap failed to load", err));
   addRadar(map);
+  if (L.Browser.mobile) {
+    const note = L.control({ position: "bottomleft" });
+    note.onAdd = () => Object.assign(L.DomUtil.create("div", "spy-map-touch-note"), { textContent: "Use two fingers to move the map" });
+    note.addTo(map);
+  }
   // The map stretches to its column's height, which changes as the form beside it grows.
   new ResizeObserver(() => map.invalidateSize()).observe(el);
   return map;

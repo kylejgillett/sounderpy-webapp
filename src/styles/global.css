@@ -526,10 +526,18 @@ footer {
 }
 
 @media (max-width: 600px) {
-  .brand-logo { width: 4.5rem; height: 4.5rem; }
+  .brand-logo { width: clamp(3.4rem, 16vw, 4.5rem); height: clamp(3.4rem, 16vw, 4.5rem); }
   .sounderpy-facts { grid-template-columns: 1fr; }
   .document-row { align-items: stretch; flex-direction: column; }
   .document-actions a { flex: 1; }
+}
+
+/* The site's small base size is too small to read on phones */
+@media (max-width: 640px) {
+  :root { font-size: 87.5%; }
+  /* Keep the title and logo on one line down to the narrowest phones */
+  .brand { gap: .8rem; font-size: clamp(1.75rem, 8.2vw, 2.4rem); }
+  .brand-text { overflow-wrap: anywhere; }
 }
 
 @media (max-width: 760px) {

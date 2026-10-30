@@ -107,6 +107,12 @@
 }
 .spy input:focus-visible, .spy select:focus-visible, .spy button:focus-visible, .spy summary:focus-visible { outline: 2px solid var(--ochre); outline-offset: 2px; }
 .spy-wide { grid-column: 1 / -1; }
+.spy input:not([type="checkbox"]), .spy select { min-width: 0; }
+.spy-fields > * { min-width: 0; }
+/* iPhones zoom the whole page when focusing a field under 16px */
+@media (pointer: coarse) {
+  .spy input:not([type="checkbox"]):not([type="radio"]), .spy select { font-size: 16px; }
+}
 
 .spy-submit, .spy-secondary {
   display: inline-flex; min-height: var(--control-height); align-items: center; justify-content: center;
@@ -155,7 +161,7 @@
 .spy-settings-x svg { width: 1.3rem; height: 1.3rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 .spy-settings-form { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
 .spy-settings-note { margin: 0; color: var(--ochre); font-size: .85rem; line-height: 1.45; }
-.spy-settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.25rem; min-height: 0; padding: 1.25rem 1.4rem; overflow-y: auto; }
+.spy-settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 1.25rem; min-height: 0; padding: 1.25rem 1.4rem; overflow-y: auto; }
 .spy-settings-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; padding: .9rem 1.4rem; border-top: 1px solid var(--line); }
 .spy-settings-actions button { justify-content: center; min-height: 2.9rem; }
 .spy-settings-done { min-width: 7rem; border-color: var(--ochre); background: var(--forest); color: var(--paper); }
@@ -171,7 +177,8 @@
 .spy-radios { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; color: var(--ink-soft); font-size: .92rem; font-weight: 600; }
 .spy-radios > span { margin-right: .25rem; }
 .spy .spy-radios label { display: block; cursor: pointer; }
-.spy-radios input { position: absolute; opacity: 0; pointer-events: none; }
+/* Only the pills show: size the real radios to nothing, or the general input width makes the page scroll sideways */
+.spy .spy-radios input { position: absolute; width: 1px; min-height: 0; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
 .spy-radios label span {
   display: inline-flex; align-items: baseline; gap: .4rem; padding: .45rem .95rem;
   border: 1px solid var(--line); border-radius: 999px; background: var(--control-bg);
@@ -215,14 +222,14 @@
   border: 1px solid var(--line-strong); border-radius: 8px; background: rgb(48 45 41 / 70%);
 }
 .spy-result:not([data-state="ready"]):not(:has(img[src])) .spy-frame { aspect-ratio: 1.6; border-style: dashed; }
-.spy-placeholder, .spy-loading { display: grid; place-content: center; justify-items: center; gap: .6rem; padding: 2rem; text-align: center; }
+.spy-placeholder, .spy-loading { display: grid; place-content: safe center; justify-items: center; gap: .6rem; padding: 2rem; text-align: center; }
 .spy-placeholder svg { width: 4.5rem; height: 4.5rem; margin-bottom: .4rem; fill: none; stroke: var(--line-strong); stroke-width: 2.5; stroke-linecap: round; }
 .spy-placeholder .spy-trace-t { stroke: var(--clay); }
 .spy-placeholder .spy-trace-td { stroke: var(--moss); }
 .spy-placeholder p { margin: 0; color: var(--forest-deep); font-family: var(--serif); font-size: 1.4rem; }
 .spy-placeholder span { max-width: 28rem; color: var(--ink-soft); line-height: 1.5; }
 
-.spy-loading { position: absolute; inset: 0; z-index: 2; background: rgb(48 45 41 / 72%); backdrop-filter: blur(2px); }
+.spy-loading { position: absolute; inset: 0; z-index: 2; overflow-y: auto; background: rgb(48 45 41 / 72%); backdrop-filter: blur(2px); }
 .spy-loading-card { display: grid; gap: .7rem; width: min(26rem, 100%); padding: 1.5rem 1.6rem; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--paper-light); box-shadow: var(--shadow-soft); text-align: left; }
 .spy-loading-title { margin: 0; color: var(--forest-deep); font-family: var(--serif); font-size: 1.4rem; }
 .spy-loading-request { margin: 0; color: var(--ink); font-weight: 600; white-space: pre-wrap; }
@@ -280,7 +287,7 @@
   width: 100vw; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: 0; border: 0;
   background: rgb(22 20 17 / 96%); color: var(--ink); overflow: hidden;
 }
-.spy-viewer[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.spy-viewer[open] { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; }
 .spy-viewer::backdrop { background: rgb(0 0 0 / 60%); }
 .spy-viewer-bar {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem 1.5rem;
@@ -314,7 +321,7 @@
 
 /* Footer under the sounding: about / cite / help */
 .spy-footer {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem 2.25rem;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 1.5rem 2.25rem;
   margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--line); color: var(--ink-soft); font-size: .92rem; line-height: 1.55;
 }
 .spy-footer section { display: grid; align-content: start; gap: .5rem; }
@@ -325,7 +332,7 @@
 .spy-footer .spy-copy { justify-self: start; min-height: 2.6rem; padding: .4rem .9rem; font-size: .88rem; }
 
 @media (max-width: 820px) {
-  .spy-panel, .spy-composite { grid-template-columns: 1fr; }
+  .spy-panel, .spy-composite { grid-template-columns: minmax(0, 1fr); }
   .spy-profile-list li { grid-template-columns: auto minmax(0, 1fr); }
   .spy-profile-list div, .spy-profile-list .spy-profile-style { grid-column: 1 / -1; }
   .spy-profile-slot .spy-map { min-height: 280px; }
@@ -334,12 +341,15 @@
 }
 
 @media (max-width: 640px) {
-  .spy-tabs button { flex: 1 1 45%; border-radius: 6px; border: 1px solid var(--line); }
-  .spy-tabs { border-bottom: 0; }
+  /* Data tabs stacked, full page width */
+  .spy-tabs { flex-direction: column; gap: .4rem; border-bottom: 0; }
+  .spy-tabs button, .spy-tabs button[aria-selected="true"] { width: 100%; margin: 0; border: 1px solid var(--line); border-radius: 6px; }
+  .spy-tabs button[aria-selected="true"] { border-color: var(--ochre); }
+  .spy-composite { padding: 1rem; }
   .spy-panel { padding: 1rem; }
   .spy-map { min-height: 320px; }
   .spy-meta { flex-direction: column; }
-  .spy-caption { grid-template-columns: 1fr; }
+  .spy-caption { grid-template-columns: minmax(0, 1fr); }
   .spy-downloads { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .spy-download:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .spy-meta span + span::before { content: none; }
