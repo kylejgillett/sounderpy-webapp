@@ -91,7 +91,7 @@ class Settings(BaseModel):
     storm_motion: Union[str, list[float]] = "right_moving"
     modify_sfc: Optional[dict[str, float]] = None
     ecape: bool = False
-    map_zoom: int = 2
+    map_zoom: int = 0
     radar: Optional[Literal["single-site", "mosaic"]] = None
     radar_time: Optional[dt.datetime] = None  # UTC; defaults to sounding time
     hodo_boundary_angle: Optional[float] = None

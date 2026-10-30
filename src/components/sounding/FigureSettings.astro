@@ -1,16 +1,13 @@
 ---
 // Optional figure customization, read by readSettings() in sounding-app.js.
 ---
-<details class="spy-settings" id="settings">
-  <summary>
-    <svg class="spy-settings-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10m4 0h2M4 12h4m4 0h8M4 18h12m4 0h0" /><circle cx="16" cy="6" r="2" /><circle cx="10" cy="12" r="2" /><circle cx="18" cy="18" r="2" /></svg>
-    <span class="spy-settings-text">
-      <span class="spy-settings-title">Customize figure <em>optional</em></span>
-      <span class="spy-settings-sub">Dark mode, ECAPE, radar map, storm motion, surface edits and more</span>
-    </span>
-    <span class="spy-settings-count" hidden></span>
-    <svg class="spy-settings-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
-  </summary>
+<dialog class="spy-settings" id="settings" aria-labelledby="spy-settings-title">
+  <header class="spy-settings-head">
+    <h2 id="spy-settings-title">Customize figure</h2>
+    <button class="spy-settings-x" type="button" data-close-settings aria-label="Close">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+    </button>
+  </header>
 
   <form class="spy-settings-form">
     <div class="spy-settings-grid">
@@ -24,7 +21,7 @@
       </fieldset>
       <fieldset>
         <legend>Map &amp; radar</legend>
-        <label>Map zoom (0 hides the map)<input name="map_zoom" type="number" min="0" value="2" /></label>
+        <label>Map zoom (0 hides the map)<input name="map_zoom" type="number" min="0" value="0" /></label>
         <label>Radar Source (NEXRAD site or MRMS)<select name="radar"><option value="">None</option><option value="single-site">NEXRAD site (nearest radar)</option><option value="mosaic">MRMS mosaic</option></select></label>
         <label>Radar time (UTC)<input name="radar_time" type="datetime-local" title="Leave blank to use the sounding time" /></label>
       </fieldset>
@@ -46,6 +43,7 @@
     </div>
     <div class="spy-settings-actions">
       <button class="spy-secondary" type="button" data-settings-reset>Reset to defaults</button>
+      <button class="spy-secondary spy-settings-done" type="button" data-close-settings>Done</button>
     </div>
   </form>
-</details>
+</dialog>

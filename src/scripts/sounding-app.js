@@ -72,7 +72,7 @@ function readSettings() {
     ecape: f("ecape").checked,
     hodo: f("hodo").checked,
     hodo_boundary_angle: num(f("hodo_boundary_angle").value),
-    map_zoom: num(f("map_zoom").value) ?? 2,
+    map_zoom: num(f("map_zoom").value) ?? 0,
     radar: f("radar").value || null,
     radar_time: f("radar_time").value || null,
     storm_motion: smDir !== null && smSpd !== null ? [smDir, smSpd] : f("storm_motion").value,
@@ -147,7 +147,7 @@ function settingsSummary(s) {
     s.ecape && "ECAPE parcel path",
     s.hodo && "Hodograph only",
     s.hodo_boundary_angle != null && `Boundary axis at ${s.hodo_boundary_angle}°`,
-    s.map_zoom === 0 ? "Map hidden" : s.map_zoom !== 2 && `Map zoom ${s.map_zoom}`,
+    s.map_zoom !== 0 && `Map zoom ${s.map_zoom}`,
     s.radar && `Radar: ${{ "single-site": "NEXRAD site", mosaic: "MRMS mosaic" }[s.radar]}${s.radar_time ? ` at ${s.radar_time.replace("T", " ")} UTC` : ""}`,
     sm && `Storm motion: ${sm}`,
     sfc && `Surface modified: ${sfc}`,
@@ -442,11 +442,20 @@ for (const name of ["airport", "hour"]) {
 const settingsForm = $(".spy-settings-form");
 function updateSettingsCount() {
   const n = settingsSummary(readSettings()).length;
-  const badge = $(".spy-settings-count");
-  badge.textContent = `${n} change${n === 1 ? "" : "s"}`;
-  badge.hidden = n === 0;
+  for (const badge of $$(".spy-settings-count")) {
+    badge.textContent = `${n} change${n === 1 ? "" : "s"}`;
+    badge.hidden = n === 0;
+  }
 }
 settingsForm.addEventListener("submit", (e) => e.preventDefault());
+$$("[data-open-settings]").forEach((b) => b.addEventListener("click", () => settingsEl.showModal()));
+$$("[data-close-settings]").forEach((b) => b.addEventListener("click", () => settingsEl.close()));
+settingsEl.addEventListener("click", (e) => { if (e.target === settingsEl) settingsEl.close(); }); // backdrop
+// Radar is drawn on the map, so choosing it needs a visible map.
+settingsForm.elements.namedItem("radar").addEventListener("change", (e) => {
+  const zoom = settingsForm.elements.namedItem("map_zoom");
+  if (e.target.value && Number(zoom.value) === 0) zoom.value = "2";
+});
 settingsForm.addEventListener("input", () => { updateSettingsCount(); saveSettings(); });
 settingsForm.addEventListener("change", () => { updateSettingsCount(); saveSettings(); });
 $("[data-settings-reset]").addEventListener("click", () => { settingsForm.reset(); updateSettingsCount(); saveSettings(); });
@@ -536,6 +545,9 @@ function savedSettings() {
   try { return JSON.parse(localStorage.getItem(SAVED_SETTINGS)) ?? []; } catch { return []; }
 }
 
+// Compared by value, never built into a selector: these strings come straight from the URL.
+const isTab = (name) => $$("[data-tab]").some((t) => t.dataset.tab === name);
+
 function requestUrl(req) {
   const params = new URLSearchParams({ source: req.source });
   for (const key of REQUEST_KEYS) if (req[key] != null && req[key] !== "") params.set(key, req[key]);
@@ -546,7 +558,7 @@ function requestUrl(req) {
 function requestFromUrl() {
   const params = new URLSearchParams(location.search);
   const source = params.get("source");
-  if (!$(`[data-tab="${source}"]`)) return null;
+  if (!isTab(source)) return null;
   const req = { source };
   for (const key of REQUEST_KEYS) if (params.get(key)) req[key] = params.get(key);
   if (req.fcst_hr != null) req.fcst_hr = Number(req.fcst_hr);
@@ -587,7 +599,7 @@ function openFromUrl() {
 window.addEventListener("popstate", () => {
   if (openFromUrl()) return;
   const tab = location.hash.slice(1);
-  showTab($(`[data-tab="${tab}"]`) ? tab : currentTab, { keepUrl: true });
+  showTab(isTab(tab) ? tab : currentTab, { keepUrl: true });
   clearResult();
 });
 
@@ -606,7 +618,7 @@ $("[data-copy-link]").addEventListener("click", async (e) => {
 if (!openFromUrl()) {
   applySettings(savedSettings());
   const tab = location.hash.slice(1);
-  showTab($(`[data-tab="${tab}"]`) ? tab : "raob");
+  showTab(isTab(tab) ? tab : "raob");
 }
 loadLatestRuns();
 

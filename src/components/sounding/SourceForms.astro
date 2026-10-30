@@ -1,6 +1,7 @@
 ---
 // The four request forms (one per data source); SourceTabs switches between them.
 // Each is two columns: the map on the left, the request details on the right.
+import FormActions from "./FormActions.astro";
 ---
 <form class="spy-panel" data-source="raob">
   <div class="spy-map" role="region" aria-label="RAOB station map"></div>
@@ -11,7 +12,7 @@
       <label>Launch date (UTC)<input name="date" type="date" required /></label>
       <label>Launch hour (UTC)<input name="hour" required inputmode="numeric" placeholder="00 or 12" /></label>
     </div>
-    <button class="spy-submit" type="submit"><span>Get sounding</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m0 0-5-5m5 5-5 5" /></svg></button>
+    <FormActions />
   </div>
 </form>
 
@@ -40,7 +41,7 @@
       <select name="profile" required aria-label="Profile"><option value="">Find flights first</option></select>
       <p class="spy-step-note">Or click a highlighted airport on the map and pick a time.</p>
     </div>
-    <button class="spy-submit" type="submit"><span>Get sounding</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m0 0-5-5m5 5-5 5" /></svg></button>
+    <FormActions />
   </div>
 </form>
 
@@ -57,7 +58,7 @@
       <label>Run date (UTC)<input name="date" type="date" /></label>
       <label>Run hour (UTC)<input name="hour" inputmode="numeric" placeholder="latest" /></label>
     </div>
-    <button class="spy-submit" type="submit"><span>Get sounding</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m0 0-5-5m5 5-5 5" /></svg></button>
+    <FormActions />
   </div>
 </form>
 
@@ -70,6 +71,6 @@
       <label>Date (UTC)<input name="date" type="date" required value="2024-08-28" /></label>
       <label>Hour (UTC)<input name="hour" required inputmode="numeric" value="23" placeholder="e.g. 18" /></label>
     </div>
-    <button class="spy-submit" type="submit"><span>Get sounding</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m0 0-5-5m5 5-5 5" /></svg></button>
+    <FormActions />
   </div>
 </form>

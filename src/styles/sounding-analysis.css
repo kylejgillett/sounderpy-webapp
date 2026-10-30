@@ -25,7 +25,7 @@
 .spy-tabs button:hover { color: var(--ink); }
 .spy-tabs button[aria-selected="true"] { border-color: var(--line); background: var(--paper-light); color: var(--forest-deep); margin-bottom: -1px; }
 
-.spy-panel, .spy-settings {
+.spy-panel {
   display: grid; gap: 1rem; padding: 1.4rem; border: 1px solid var(--line); border-radius: 8px;
   background: rgb(69 65 58 / 55%); box-shadow: var(--shadow-soft);
 }
@@ -37,7 +37,6 @@
 .spy-side { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
 .spy-side .spy-fields { grid-template-columns: 1fr 1fr; gap: .85rem; }
 .spy-side .spy-fields > :first-child { grid-column: 1 / -1; }
-.spy-side .spy-submit { margin-top: auto; }
 
 /* The map fills its column's height; its own look lives in station-map.css */
 .spy-map {
@@ -77,22 +76,36 @@
 .spy-secondary:hover { background: var(--control-bg-hover); }
 .spy [disabled] { opacity: .55; cursor: progress; }
 
-.spy-settings { margin-top: 1rem; }
-/* "Customize figure" header: icon, title + hint, change counter, chevron */
-.spy-settings summary { display: flex; align-items: center; gap: 1rem; list-style: none; cursor: pointer; }
-.spy-settings summary::-webkit-details-marker { display: none; }
-.spy-settings-icon, .spy-settings-chevron { flex: none; fill: none; stroke: var(--ochre); stroke-width: 2; stroke-linecap: round; }
-.spy-settings-icon { width: 1.9rem; height: 1.9rem; }
-.spy-settings-chevron { width: 1.5rem; height: 1.5rem; margin-left: auto; stroke: var(--ink-soft); transition: transform .2s; }
-.spy-settings[open] .spy-settings-chevron { transform: rotate(180deg); }
-.spy-settings-text { display: grid; gap: .15rem; min-width: 0; }
-.spy-settings-title { color: var(--forest-deep); font-family: var(--serif); font-size: 1.3rem; }
-.spy-settings-title em { margin-left: .4rem; color: var(--ink-soft); font-family: var(--sans); font-size: .78rem; font-style: normal; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
-.spy-settings-sub { color: var(--ink-soft); font-size: .92rem; }
-.spy-settings-count { flex: none; padding: .2rem .65rem; border: 1px solid var(--ochre); border-radius: 999px; background: rgb(221 195 134 / 14%); color: var(--ochre); font-size: .82rem; font-weight: 700; }
-.spy-settings summary:hover .spy-settings-title { color: var(--ochre); }
-.spy-settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.25rem; margin-top: 1.1rem; }
-.spy-settings-actions { display: flex; justify-content: flex-end; margin-top: 1rem; }
+/* Settings button above Get sounding */
+.spy-actions { display: grid; gap: .6rem; margin-top: auto; }
+.spy-settings-open {
+  display: flex; align-items: center; justify-content: center; gap: .55rem; min-height: 2.9rem; padding: .4rem .9rem;
+  border: 1px solid var(--control-border); border-radius: 6px; background: var(--control-bg); color: var(--control-text);
+  font-size: .95rem; font-weight: 650; cursor: pointer;
+}
+.spy-settings-open:hover { border-color: var(--ochre); background: var(--control-bg-hover); }
+.spy-settings-open svg { flex: none; width: 1.2rem; height: 1.2rem; fill: none; stroke: var(--ochre); stroke-width: 2; stroke-linecap: round; }
+.spy-settings-count { flex: none; padding: .05rem .5rem; border: 1px solid var(--ochre); border-radius: 999px; background: rgb(221 195 134 / 14%); color: var(--ochre); font-size: .8rem; font-weight: 700; }
+
+/* Figure settings pop-up */
+.spy-settings {
+  width: min(64rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); padding: 0; overflow: hidden;
+  border: 1px solid var(--line-strong); border-radius: 10px; background: var(--paper-light); color: var(--ink);
+  box-shadow: 0 18px 50px rgb(0 0 0 / 45%);
+}
+.spy-settings[open] { display: flex; flex-direction: column; }
+.spy-settings::backdrop { background: rgb(20 18 15 / 62%); backdrop-filter: blur(2px); }
+.spy-settings-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.4rem; border-bottom: 1px solid var(--line); }
+.spy-settings-head h2 { margin: 0; color: var(--forest-deep); font-family: var(--serif); font-size: 1.5rem; font-weight: 600; }
+.spy-settings-x { display: grid; place-items: center; width: 2.6rem; height: 2.6rem; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--ink-soft); cursor: pointer; }
+.spy-settings-x:hover { background: var(--control-bg-hover); color: var(--ink); }
+.spy-settings-x svg { width: 1.3rem; height: 1.3rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.spy-settings-form { display: flex; flex-direction: column; min-height: 0; }
+.spy-settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.25rem; min-height: 0; padding: 1.25rem 1.4rem; overflow-y: auto; }
+.spy-settings-actions { display: flex; justify-content: space-between; gap: .75rem; padding: .9rem 1.4rem; border-top: 1px solid var(--line); }
+.spy-settings-actions button { justify-content: center; min-height: 2.9rem; }
+.spy-settings-done { min-width: 7rem; border-color: var(--ochre); background: var(--forest); color: var(--paper); }
+.spy-settings-done:hover { background: var(--forest-deep); }
 
 /* ACARS: two lightly numbered steps, separated by a rule */
 .spy-step { display: grid; gap: .75rem; padding-top: 1rem; border-top: 1px solid var(--line); }
@@ -262,7 +275,7 @@
 @media (max-width: 640px) {
   .spy-tabs button { flex: 1 1 45%; border-radius: 6px; border: 1px solid var(--line); }
   .spy-tabs { border-bottom: 0; }
-  .spy-panel, .spy-settings { padding: 1rem; }
+  .spy-panel { padding: 1rem; }
   .spy-map { min-height: 320px; }
   .spy-meta { flex-direction: column; }
   .spy-caption { grid-template-columns: 1fr; }
