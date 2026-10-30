@@ -122,6 +122,7 @@ COMPOSITE_FETCH_WORKERS = 4  # fetched side by side; drawing still takes turns u
 
 class CompositeSettings(BaseModel):
     """Names match SounderPy's build_composite. The style lists hold one entry per profile."""
+    dark_mode: bool = True
     shade_between: bool = True
     cmap: Literal["viridis", "plasma", "cividis", "turbo", "coolwarm"] = "viridis"
     colors_to_use: Optional[list[str]] = None
@@ -383,7 +384,7 @@ def _render_png(clean_data, s):
 
 
 def _render_composite(data_list, s):
-    """Render a composite of several profiles and return the PNG bytes. Always dark mode."""
+    """Render a composite of several profiles and return the PNG bytes."""
     with TemporaryDirectory(prefix="sounderpy_composite_") as tmpdir:
         output = Path(tmpdir) / "composite.png"
 
@@ -397,7 +398,7 @@ def _render_composite(data_list, s):
                     ls_to_use=s.ls_to_use or "none",
                     lw_to_use=s.lw_to_use or "none",
                     alphas_to_use=s.alphas_to_use or "none",
-                    dark_mode=True,
+                    dark_mode=s.dark_mode,
                     save=True,
                     filename=str(output),
                 )

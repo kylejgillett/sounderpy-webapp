@@ -611,7 +611,7 @@ function lineControls(style) {
   return box;
 }
 
-// The /api/composite request; names match SounderPy's build_composite arguments. Always dark mode on the server.
+// The /api/composite request; names match SounderPy's build_composite arguments.
 function compositeRequest() {
   const options = $(".spy-composite-options");
   const cmap = options.querySelector('[name="cmap"]').value;
@@ -619,6 +619,7 @@ function compositeRequest() {
     source: "composite",
     profiles: profiles.map(({ style, ...request }) => request),
     settings: {
+      dark_mode: options.querySelector('[name="dark_mode"]').checked,
       shade_between: options.querySelector('[name="shade_between"]').checked,
       ...(cmap === "custom" ? { colors_to_use: profiles.map((p) => p.style.color) } : { cmap }),
       ls_to_use: profiles.map((p) => p.style.ls),
