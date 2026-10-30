@@ -30,7 +30,7 @@ async function api(path, body) {
 }
 
 function setBusy(busy, message = "") {
-  $$(".spy-submit, [data-action], [data-download]").forEach((el) => el.toggleAttribute("disabled", busy));
+  $$(".spy-panel .spy-submit, [data-action], [data-download]").forEach((el) => el.toggleAttribute("disabled", busy));
   status.textContent = message;
   status.classList.remove("is-error");
 }
@@ -344,7 +344,7 @@ const maps = {};
 
 async function initMap(form) {
   const source = form.dataset.source;
-  if (maps[source]) return maps[source].map.invalidateSize();
+  if (maps[source]) return maps[source].map?.invalidateSize();
   maps[source] = {};
   const el = $(".spy-map", form);
 
@@ -393,6 +393,7 @@ const CREDITS = {
   acars: "Aircraft profiles: ACARS/AMDAR data from the University of Oklahoma SHARP archive.",
   bufkit: "Forecast soundings: Penn State BUFKIT feed, with past runs from the Iowa Environmental Mesonet archive.",
   reanalysis: "Reanalysis: RAP and RUC model analyses from NOAA NCEI.",
+  composite: "Composites combine the data sources of the profiles you add.",
 };
 
 let currentTab = null;
@@ -405,6 +406,7 @@ function showTab(name, { keepUrl = false } = {}) {
     p.hidden = p.dataset.source !== name;
     if (!p.hidden) initMap(p);
   });
+  $("[data-composite]").hidden = name !== "composite";
   status.textContent = "";
   if (!keepUrl) history.replaceState(null, "", `${location.pathname}#${name}`);
 }
@@ -427,7 +429,12 @@ for (const input of $$('.spy-panel:not([data-source="acars"]) [name="hour"]')) {
 }
 
 $$("[data-tab]").forEach((t) => t.addEventListener("click", () => showTab(t.dataset.tab)));
-$$(".spy-panel").forEach((form) => form.addEventListener("submit", (e) => { e.preventDefault(); getSounding(form); }));
+// A form moved into the Add profile pop-up saves a profile; otherwise it gets a sounding.
+$$(".spy-panel").forEach((form) => form.addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (profileDialog.open) saveProfile(form);
+  else getSounding(form);
+}));
 const acarsForm = $('[data-source="acars"]');
 $('[data-action="find-profiles"]').addEventListener("click", () => findProfiles(acarsForm));
 acarsForm.addEventListener("change", (e) => { if (e.target.name === "search") setSearchMode(acarsForm, e.target.value); });
@@ -497,6 +504,108 @@ $(".spy-image-link").addEventListener("click", () => {
   viewer.open(src, title);
 });
 
+// ---- Composite tab: the profile list and Add profile pop-up -------------------------
+// Front end only for now: Build composite doesn't contact the server yet.
+
+const MAX_PROFILES = 8, MIN_PROFILES = 2;
+const profileDialog = $(".spy-profile-dialog");
+const profileSlot = $(".spy-profile-slot");
+const profiles = [];   // regular requests, without figure settings
+let editingIndex = null; // the row being edited, or null when adding a new profile
+let borrowedForm = null;
+
+// The request forms keep a marker at their normal spot, so they can return after being borrowed.
+const formHomes = new Map($$(".spy-panel").map((form) => {
+  const marker = document.createComment("request form");
+  form.before(marker);
+  return [form, marker];
+}));
+
+function borrowForm(source) {
+  returnForm();
+  const form = $(`.spy-panel[data-source="${source}"]`);
+  profileSlot.append(form);
+  form.hidden = false;
+  $(".spy-submit span", form).textContent = editingIndex === null ? "Add to composite" : "Save profile";
+  borrowedForm = form;
+  $$("[data-profile-type]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.profileType === source)));
+  initMap(form);
+  return form;
+}
+
+function returnForm() {
+  if (!borrowedForm) return;
+  $(".spy-submit span", borrowedForm).textContent = "Get sounding";
+  borrowedForm.hidden = true;
+  formHomes.get(borrowedForm).after(borrowedForm);
+  borrowedForm = null;
+}
+
+function openProfileDialog({ index = null, request = null } = {}) {
+  editingIndex = index;
+  $("#spy-profile-title").textContent = index === null ? "Add a profile" : `Edit profile ${String.fromCharCode(65 + index)}`;
+  profileDialog.showModal();
+  borrowForm(request?.source ?? borrowedSource);
+  if (request) fillForm(request);
+}
+
+let borrowedSource = "raob"; // the pop-up reopens on the last data type used
+
+function saveProfile(form) {
+  let request;
+  try { request = buildRequest(form); } catch (err) { return showError(err, "Check this profile"); }
+  delete request.settings;
+  borrowedSource = request.source;
+  if (editingIndex === null) profiles.push(request);
+  else profiles[editingIndex] = request;
+  profileDialog.close();
+  renderProfiles();
+}
+
+function renderProfiles() {
+  const full = profiles.length >= MAX_PROFILES;
+  $(".spy-profile-count").textContent = `${profiles.length} of ${MAX_PROFILES}`;
+  $(".spy-profile-empty").hidden = profiles.length > 0;
+  $("[data-add-profile]").disabled = full;
+  $("[data-build-composite]").disabled = profiles.length < MIN_PROFILES;
+
+  const action = (label, handler, disabled = false) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    button.disabled = disabled;
+    button.addEventListener("click", handler);
+    return button;
+  };
+  $(".spy-profile-list").replaceChildren(...profiles.map((request, i) => {
+    const row = document.createElement("li");
+    const letter = document.createElement("b");
+    const text = document.createElement("span");
+    const actions = document.createElement("div");
+    letter.textContent = String.fromCharCode(65 + i);
+    text.textContent = describeRequest({ ...request, settings: {} });
+    actions.append(
+      action("Edit", () => openProfileDialog({ index: i, request })),
+      // Opens a prefilled new profile, so only the forecast hour or site needs changing.
+      action("Duplicate", () => openProfileDialog({ request }), full),
+      action("Remove", () => { profiles.splice(i, 1); renderProfiles(); }),
+    );
+    row.append(letter, text, actions);
+    return row;
+  }));
+}
+
+$("[data-add-profile]").addEventListener("click", () => openProfileDialog());
+$("[data-close-profile]").addEventListener("click", () => profileDialog.close());
+profileDialog.addEventListener("click", (e) => { if (e.target === profileDialog) profileDialog.close(); }); // backdrop
+profileDialog.addEventListener("close", () => { borrowedSource = borrowedForm?.dataset.source ?? borrowedSource; returnForm(); });
+$$("[data-profile-type]").forEach((b) => b.addEventListener("click", () => borrowForm(b.dataset.profileType)));
+$("[data-build-composite]").addEventListener("click", () => showError(
+  new Error(`The server side of composites isn't connected yet, so these ${profiles.length} profiles can't be plotted.`),
+  "Composite preview",
+));
+renderProfiles();
+
 // ---- Shareable links and saved settings -------------------------------------------
 // A sounding's request lives in the address (?source=raob&site=OAX&date=…&hour=12), so copying
 // the URL reproduces it. Figure settings are added only where they differ from the defaults.
@@ -558,7 +667,7 @@ function requestUrl(req) {
 function requestFromUrl() {
   const params = new URLSearchParams(location.search);
   const source = params.get("source");
-  if (!isTab(source)) return null;
+  if (!isTab(source) || source === "composite") return null; // composites have no share links yet
   const req = { source };
   for (const key of REQUEST_KEYS) if (params.get(key)) req[key] = params.get(key);
   if (req.fcst_hr != null) req.fcst_hr = Number(req.fcst_hr);

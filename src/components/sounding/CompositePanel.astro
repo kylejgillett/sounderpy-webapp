@@ -1,0 +1,47 @@
+---
+// Composite tab: build a list of profiles, then plot them together. The "Add profile"
+// pop-up borrows the regular request forms (moved in by sounding-app.js).
+const types = [
+  ["raob", "Observed (RAOB)"],
+  ["acars", "Aircraft (ACARS)"],
+  ["bufkit", "Model Forecast (BUFKIT)"],
+  ["reanalysis", "Reanalysis (RAP-RUC)"],
+];
+const schemes = ["Viridis", "Plasma", "Cividis", "Turbo", "Coolwarm"];
+---
+<section class="spy-composite" data-composite hidden>
+  <div class="spy-composite-main">
+    <div class="spy-composite-head">
+      <h3>Profiles</h3>
+      <span class="spy-profile-count"></span>
+    </div>
+    <p class="spy-profile-empty">No profiles yet. Add at least two to compare them on one plot.</p>
+    <ol class="spy-profile-list"></ol>
+    <button class="spy-secondary spy-profile-add" type="button" data-add-profile>+ Add profile</button>
+  </div>
+
+  <div class="spy-side">
+    <p class="spy-hint">Overlay up to 8 soundings on one Skew-T and hodograph. Mix any data types, sites, and times.</p>
+    <div class="spy-composite-options">
+      <label class="spy-check"><input type="checkbox" name="dark_mode" />Dark mode</label>
+      <label class="spy-check"><input type="checkbox" name="shade_between" checked />Shade between temperature and dewpoint</label>
+      <label>Color scheme<select name="cmap">{schemes.map((s) => <option value={s.toLowerCase()}>{s}</option>)}</select></label>
+    </div>
+    <div class="spy-actions">
+      <button class="spy-submit" type="button" data-build-composite disabled><span>Build composite</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m0 0-5-5m5 5-5 5" /></svg></button>
+    </div>
+  </div>
+</section>
+
+<dialog class="spy-profile-dialog" aria-labelledby="spy-profile-title">
+  <header class="spy-settings-head">
+    <h2 id="spy-profile-title">Add a profile</h2>
+    <button class="spy-settings-x" type="button" data-close-profile aria-label="Close">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+    </button>
+  </header>
+  <div class="spy-profile-types" role="group" aria-label="Data type">
+    {types.map(([type, label]) => <button type="button" data-profile-type={type} aria-pressed="false">{label}</button>)}
+  </div>
+  <div class="spy-profile-slot"></div>
+</dialog>
