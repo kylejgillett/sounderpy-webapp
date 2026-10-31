@@ -1,12 +1,15 @@
 ---
-// Thin bar above the tabs: sounding-server health, the new-address notice, and the current UTC time.
+// Thin bar above the tabs: sounding-server health, the What's new link, and the current UTC time.
 // Filled in by sounding-app.js.
+import { RELEASES } from "../../data/whats-new.js";
 ---
 <div class="spy-statusbar">
   <p class="spy-health" data-state="checking" role="status" aria-live="polite">
     <span class="spy-health-dot" aria-hidden="true"></span>
     <span class="spy-health-text">Checking sounding server…</span>
   </p>
-  <p class="spy-moved">We've moved! Update your bookmarks to <strong>sounderpy.app</strong></p>
+  <button class="spy-whats-new-link" type="button" data-whats-new={RELEASES[0].id} aria-haspopup="dialog">
+    What's new<span class="spy-whats-new-dot" hidden><span class="spy-sr-only"> (new updates)</span></span>
+  </button>
   <p class="spy-clock"><time class="spy-utc"></time></p>
 </div>

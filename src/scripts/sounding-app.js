@@ -867,6 +867,23 @@ $('.spy-composite-options [name="cmap"]').addEventListener("change", (e) => {
 $("[data-build-composite]").addEventListener("click", () => runSounding(compositeRequest()));
 renderProfiles();
 
+// ---- What's new: a dot on the link until this browser has opened the latest notes ---
+
+const WHATS_NEW_SEEN = "sounderpy-whats-new-seen";
+const whatsNewLink = $("[data-whats-new]");
+const whatsNewDialog = $(".spy-whats-new");
+const whatsNewDot = $(".spy-whats-new-dot");
+let whatsNewSeen = null;
+try { whatsNewSeen = localStorage.getItem(WHATS_NEW_SEEN); } catch { /* storage blocked: the dot just shows */ }
+whatsNewDot.hidden = whatsNewSeen === whatsNewLink.dataset.whatsNew;
+whatsNewLink.addEventListener("click", () => {
+  whatsNewDialog.showModal();
+  whatsNewDot.hidden = true;
+  try { localStorage.setItem(WHATS_NEW_SEEN, whatsNewLink.dataset.whatsNew); } catch { /* not remembered */ }
+});
+$("[data-close-whats-new]").addEventListener("click", () => whatsNewDialog.close());
+whatsNewDialog.addEventListener("click", (e) => { if (e.target === whatsNewDialog) whatsNewDialog.close(); }); // backdrop
+
 // ---- Shareable links and saved settings -------------------------------------------
 // A sounding's request lives in the address (?source=raob&site=OAX&date=…&hour=12), so copying
 // the URL reproduces it. Figure settings are added only where they differ from the defaults.

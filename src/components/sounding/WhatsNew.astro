@@ -1,0 +1,26 @@
+---
+// "What's new" pop-up, opened from the status bar. Release notes live in src/data/whats-new.js.
+import { RELEASES } from "../../data/whats-new.js";
+---
+<dialog class="spy-whats-new" aria-labelledby="spy-whats-new-title">
+  <header class="spy-settings-head">
+    <h2 id="spy-whats-new-title">What's new</h2>
+    <button class="spy-settings-x" type="button" data-close-whats-new aria-label="Close">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+    </button>
+  </header>
+  <div class="spy-whats-new-body">
+    {RELEASES.map((release) => (
+      <section>
+        {release.notice && (
+          <div class="spy-whats-new-notice">
+            <strong>{release.notice.heading}</strong>
+            <span>{release.notice.text}</span>
+          </div>
+        )}
+        <h3>{release.date}</h3>
+        <ul>{release.items.map((item) => <li>{item}</li>)}</ul>
+      </section>
+    ))}
+  </div>
+</dialog>

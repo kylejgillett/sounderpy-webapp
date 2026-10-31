@@ -2,6 +2,7 @@
 import '../styles/global.css';
 import { sitePath } from '../utils/site-path.js';
 import NavLink from '../components/NavLink.astro';
+import { RELEASES } from '../data/whats-new.js';
 const { title = 'SounderPy Sounding Analysis', description = 'Plot observed, aircraft, model forecast, and reanalysis soundings with SounderPy, right in your browser.' } = Astro.props;
 const currentPath = Astro.url.pathname.replace(/\/+$/, '') || '/';
 const isHome = currentPath === (sitePath('/').replace(/\/+$/, '') || '/');
@@ -58,6 +59,6 @@ const links = [
       </nav>
     </header>
     <main><slot /></main>
-    <footer><span>© {new Date().getFullYear()} Kyle J. Gillett · SounderPy is open source</span></footer>
+    <footer><span>© {new Date().getFullYear()} Kyle J. Gillett · SounderPy is open source · sounderpy.app v{RELEASES[0].version}</span></footer>
   </body>
 </html>
