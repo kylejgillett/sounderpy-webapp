@@ -24,6 +24,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+import diskcache
 import pandas as pd
 import requests
 import sounderpy as spy
@@ -31,6 +32,8 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
+
+from launches import get_launches, recent_launches
 
 
 logging.basicConfig(
@@ -79,6 +82,19 @@ PLOT_LOCK = threading.Lock()
 LATEST_RUN_CACHE_LOCK = threading.Lock()
 LATEST_RUN_CACHE = {"expires": 0.0, "data": None}
 LATEST_RUN_CACHE_SECONDS = 300
+
+# Fetched profiles, kept on disk and shared across restarts. Least recently used go first at the cap.
+PROFILE_CACHE_DIR = os.environ.get("PROFILE_CACHE_DIR", str(Path(__file__).parent / "cache"))
+PROFILE_CACHE_BYTES = int(os.environ.get("PROFILE_CACHE_BYTES", 2 * 1024 ** 3))
+PROFILE_CACHE_LATEST_SECONDS = 300  # "latest run" requests: the next run can appear at any time
+PROFILE_CACHE_RECENT_SECONDS = 3600  # the last two days: archives can still revise or fill in a profile
+PROFILE_CACHE_SKIP_SOURCES = {"reanalysis"}
+
+PROFILE_CACHE = diskcache.Cache(
+    PROFILE_CACHE_DIR,
+    size_limit=PROFILE_CACHE_BYTES,
+    eviction_policy="least-recently-used",
+)
 
 
 # -----------------------------------------------------------------------------
@@ -342,6 +358,67 @@ def _load_data(req):
     return clean_data, label
 
 
+def _cache_key(req):
+    """Everything that decides which profile a request gets. Plot settings don't, so they share an entry."""
+    return (
+        SOUNDERPY_VERSION,
+        req.source,
+        (req.site or "").strip().upper(),
+        (req.profile or "").strip(),
+        (req.model or "").lower(),
+        req.fcst_hr,
+        req.lat,
+        req.lon,
+        req.date.isoformat() if req.date else None,
+        _hour(req.hour) if req.hour not in (None, "") else None,
+    )
+
+
+def _cache_ttl(req):
+    """Seconds to keep a profile, or None for a fixed past profile that won't change."""
+    if not (req.date and req.hour not in (None, "")):
+        return PROFILE_CACHE_LATEST_SECONDS
+    if req.date >= dt.datetime.now(dt.timezone.utc).date() - dt.timedelta(days=2):
+        return PROFILE_CACHE_RECENT_SECONDS
+    return None
+
+
+def _describe(req):
+    """The fields a request actually set, for the log."""
+    fields = req.model_dump(include={"site", "profile", "model", "fcst_hr", "lat", "lon", "date", "hour"})
+    return " ".join(f"{name}={value}" for name, value in fields.items() if value not in (None, ""))
+
+
+def _fetch_data(req, use_cache=True):
+    """_load_data through the profile cache. Returns (clean_data, label).
+
+    A cache problem is never a request problem: it's logged, and the data comes from the source.
+    """
+    started = time.time()
+    key = _cache_key(req)
+    cacheable = req.source not in PROFILE_CACHE_SKIP_SOURCES
+
+    if use_cache and cacheable:
+        try:
+            cached = PROFILE_CACHE.get(key)
+        except Exception:
+            LOGGER.exception("Profile cache read failed")
+            cached = None
+        if cached is not None:
+            LOGGER.info("fetch %s %s data=cache fetch=%.2fs", req.source, _describe(req), time.time() - started)
+            return cached
+
+    result = _load_data(req)
+    LOGGER.info("fetch %s %s data=source fetch=%.2fs", req.source, _describe(req), time.time() - started)
+
+    if cacheable:
+        try:
+            PROFILE_CACHE.set(key, result, expire=_cache_ttl(req))
+        except Exception:
+            LOGGER.exception("Profile cache write failed")
+    return result
+
+
 def _render_png(clean_data, s):
     """Render a sounding or hodograph and return the PNG bytes."""
     storm_motion = s.storm_motion
@@ -499,6 +576,26 @@ def latest_runs():
         return LATEST_RUN_CACHE["data"]
 
 
+@app.get("/api/raob/launches/recent")
+def raob_recent_launches():
+    """Each launch time from the last two days with its site IDs. North America only."""
+    try:
+        return {"cycles": recent_launches()}
+    except (requests.RequestException, KeyError, ValueError):
+        LOGGER.exception("Recent launch list failed")
+        raise HTTPException(502, "The launch list isn't available right now.")
+
+
+@app.get("/api/raob/launches")
+def raob_launches(date: dt.date = Query(...), hour: int = Query(..., ge=0, le=23)):
+    """Site IDs with a sounding at this date and hour. North America only."""
+    try:
+        return {"date": date, "hour": hour, "stations": get_launches(date, hour)}
+    except (requests.RequestException, KeyError, ValueError):
+        LOGGER.exception("Launch list failed for %s %02dZ", date, hour)
+        raise HTTPException(502, "The launch list isn't available right now.")
+
+
 @app.get("/api/acars/profiles")
 def acars_profiles(
     day: dt.date = Query(..., alias="date"),
@@ -539,7 +636,7 @@ def sounding(req: SoundingRequest):
     started = time.time()
 
     try:
-        clean_data, label = _load_data(req)
+        clean_data, label = _fetch_data(req)
     except HTTPException:
         raise
     # SounderPy calls sys.exit() for some bad inputs (e.g. a missing ACARS profile), so catch SystemExit too.
@@ -547,9 +644,11 @@ def sounding(req: SoundingRequest):
         LOGGER.exception("Data retrieval failed for %s", req.model_dump(exclude={"settings"}))
         raise HTTPException(502, _friendly_error(req, exc))
 
+    drawing = time.time()
     try:
         if req.output != "png":
             content, filename, content_type = _export_file(clean_data, req.output)
+            LOGGER.info("%s %s served in %.1fs draw=%.2fs", req.source, req.output, time.time() - started, time.time() - drawing)
             return Response(
                 content,
                 media_type=content_type,
@@ -565,7 +664,7 @@ def sounding(req: SoundingRequest):
             "incomplete profiles. Try turning off ECAPE, radar, or surface edits, or pick another time.",
         )
 
-    LOGGER.info("%s %s served in %.1fs", req.source, req.output, time.time() - started)
+    LOGGER.info("%s %s served in %.1fs draw=%.2fs", req.source, req.output, time.time() - started, time.time() - drawing)
     return {
         "label": label,
         "info": _sounding_info(clean_data, req.source),
@@ -573,11 +672,11 @@ def sounding(req: SoundingRequest):
     }
 
 
-def _fetch_profiles(profiles):
+def _fetch_profiles(profiles, use_cache=True):
     """Fetch side by side. Returns (data, None) or (None, error) per profile, so failures keep their letter."""
     def fetch(profile):
         try:
-            return _load_data(profile)[0], None
+            return _fetch_data(profile, use_cache)[0], None
         except HTTPException as exc:
             return None, exc.detail
         # SounderPy calls sys.exit() for some bad inputs, so catch SystemExit too.
@@ -607,7 +706,7 @@ def _settle_latest_runs(profiles, results):
     for (model, site), indexes in groups.items():
         if not mixed(indexes):
             continue
-        for i, result in zip(indexes, _fetch_profiles([profiles[i] for i in indexes])):
+        for i, result in zip(indexes, _fetch_profiles([profiles[i] for i in indexes], use_cache=False)):
             results[i] = result
         if mixed(indexes):
             return results, f"the {model} at {site}"
@@ -629,13 +728,14 @@ def composite(req: CompositeRequest):
     if problems:
         raise HTTPException(502, " ".join(problems))
 
+    drawing = time.time()
     try:
         png = _render_composite([data for data, _ in results], req.settings)
     except (Exception, SystemExit):
         LOGGER.exception("Composite rendering failed for %s", req.model_dump())
         raise HTTPException(500, "The data loaded, but SounderPy couldn't draw this composite. Try removing a very short or incomplete profile.")
 
-    LOGGER.info("composite of %d served in %.1fs", len(req.profiles), time.time() - started)
+    LOGGER.info("composite of %d served in %.1fs draw=%.2fs", len(req.profiles), time.time() - started, time.time() - drawing)
     return {
         "label": f"Composite of {len(req.profiles)} soundings",
         "info": None,

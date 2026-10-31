@@ -5,3 +5,4 @@ requests
 sounderpy @  https://github.com/kylejgillett/sounderpy/releases/download/v3.2.0/sounderpy-3.2.0-py3-none-any.whl
 fastapi
 uvicorn[standard]
+diskcache

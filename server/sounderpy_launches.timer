@@ -1,0 +1,10 @@
+[Unit]
+Description=Check for new RAOB launches at 01, 07, 13, 19 and 21Z
+
+[Timer]
+OnCalendar=*-*-* 01,07,13,19,21:00:00 UTC
+# Catch up after a missed run (e.g. a reboot).
+Persistent=true
+
+[Install]
+WantedBy=timers.target

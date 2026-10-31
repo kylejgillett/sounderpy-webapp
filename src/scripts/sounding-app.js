@@ -354,6 +354,98 @@ async function loadLatestRuns() {
 
 const maps = {};
 
+// Shows when RAOB sites last launched, from the last two days. The buttons narrow that to one launch
+// time, or to the form's date and hour. If the lists can't load, the map just shows every site as usual.
+const LAUNCH_HOURS = ["00", "06", "12", "18"];
+const DAY_MS = 86400000;
+
+function launchInfo(time, now = Date.now()) {
+  const date = new Date(time);
+  const hour = String(date.getUTCHours()).padStart(2, "0");
+  const day = date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  return { hour, when: `${hour}Z ${day}`, date: time.slice(0, 10), fresh: now - date.getTime() <= DAY_MS };
+}
+
+function launchesFor(stations, info) {
+  return new Map(stations.map((id) => [id.toUpperCase(), info]));
+}
+
+function trackLaunches(form, map, layer, launchControl) {
+  let cycles = [], view = "all", shown = new Map(), latest = 0;
+  const views = [["all", "All"], ...LAUNCH_HOURS.map((hour) => [hour, `${hour}Z`]), ["date", "Form date"]];
+  const control = launchControl(map, views, (next) => { view = next; show(); });
+
+  const newestAt = (hour) => cycles.find((cycle) => launchInfo(cycle.time).hour === hour);
+
+  async function show() {
+    const request = ++latest;
+    control.setActive(view);
+    control.setLoading("date", false);
+    if (view === "date") {
+      const hour = parseHour(form.hour.value);
+      if (!form.date.value || !hour) return layer.setLaunches(shown = new Map(), true);
+      control.setLoading("date", true);
+      try {
+        const res = await api(`/api/raob/launches?date=${form.date.value}&hour=${Number(hour)}`);
+        const { stations } = await res.json();
+        if (request !== latest) return;
+        const info = launchInfo(`${form.date.value}T${hour}:00:00Z`);
+        layer.setLaunches(shown = launchesFor(stations, info), true);
+        control.setView("date", { title: `${info.when}: ${stations.length} sites` });
+        control.setLoading("date", false);
+      } catch (err) {
+        if (request !== latest) return;
+        console.error(err);
+        control.setView("date", { title: "This launch list isn't available right now" });
+        control.setLoading("date", false);
+        layer.setLaunches(shown = new Map(), false);
+      }
+    } else if (view === "all") {
+      // Newest last, so each site ends up with its most recent launch.
+      shown = new Map();
+      for (const cycle of [...cycles].reverse()) launchesFor(cycle.stations, launchInfo(cycle.time)).forEach((info, id) => shown.set(id, info));
+      layer.setLaunches(shown, false);
+    } else {
+      const cycle = newestAt(view);
+      layer.setLaunches(shown = launchesFor(cycle.stations, launchInfo(cycle.time)), true);
+    }
+  }
+
+  async function load() {
+    for (const hour of LAUNCH_HOURS) control.setView(hour, { disabled: true, title: "Loading…" });
+    try {
+      const res = await api("/api/raob/launches/recent");
+      cycles = (await res.json()).cycles;
+      for (const hour of LAUNCH_HOURS) {
+        const cycle = newestAt(hour);
+        control.setView(hour, cycle?.stations.length
+          ? { title: `${launchInfo(cycle.time).when}: ${cycle.stations.length} sites` }
+          : { disabled: true, title: `No ${hour}Z launches in the last two days` });
+      }
+    } catch (err) {
+      console.error(err);
+      for (const hour of LAUNCH_HOURS) control.setView(hour, { disabled: true, title: "The launch list isn't available right now" });
+    }
+    if (view === "all") show();
+  }
+
+  const followForm = () => { if (view === "date") show(); };
+  form.date.addEventListener("change", followForm);
+  form.hour.addEventListener("change", followForm);
+  control.setActive(view);
+  load();
+
+  return {
+    // Fill the form with the launch the map is showing for this site.
+    pick(id) {
+      const launch = view !== "date" && shown.get(String(id).toUpperCase());
+      if (!launch) return;
+      form.date.value = launch.date;
+      form.hour.value = launch.hour;
+    },
+  };
+}
+
 async function initMap(form) {
   const source = form.dataset.source;
   if (maps[source]) return maps[source].map?.invalidateSize();
@@ -361,14 +453,16 @@ async function initMap(form) {
   const el = $(".spy-map", form);
 
   try {
-    const { createBaseMap, fetchData, stationLayer, pointPicker, airportLayer, FAINT_DOT } = await import("./station-map.js");
+    const { createBaseMap, fetchData, stationLayer, launchControl, pointPicker, airportLayer, FAINT_DOT } = await import("./station-map.js");
     const map = maps[source].map = createBaseMap(el);
 
     if (source === "raob" || source === "bufkit") {
       const rows = await fetchData(`${source}-stations.json`);
-      const layer = stationLayer(map, rows, { onPick: ([id]) => { form.site.value = id; } });
+      let launches = null;
+      const layer = stationLayer(map, rows, { onPick: ([id]) => { form.site.value = id; launches?.pick(id); } });
       layer.select(form.site.value);
       form.site.addEventListener("input", () => layer.select(form.site.value, { pan: true }));
+      if (source === "raob") launches = trackLaunches(form, map, layer, launchControl);
     } else if (source === "reanalysis") {
       const picker = pointPicker(map, { onPick: (lat, lon) => { form.coords.value = `${lat}, ${lon}`; } });
       form.coords.addEventListener("change", () => {
@@ -431,7 +525,11 @@ const utcHour = now.getUTCHours();
 for (const form of $$(".spy-panel")) {
   if (form.dataset.source !== "bufkit" && !form.date.value) form.date.value = today;
 }
-$('[data-source="raob"] [name="hour"]').value = utcHour >= 13 || utcHour < 1 ? "12" : "00";
+// RAOB opens on the newest 00 or 12Z launch that's been checked, an hour after launch,
+// so this can still be yesterday's date just after 00Z.
+const checked = new Date(now.getTime() - 3600000);
+$('[data-source="raob"] [name="date"]').value = checked.toISOString().slice(0, 10);
+$('[data-source="raob"] [name="hour"]').value = checked.getUTCHours() >= 12 ? "12" : "00";
 $('[data-source="acars"] [name="hour"]').value = String(utcHour).padStart(2, "0");
 
 // Hour boxes that a sounding request depends on get a friendly native validation message.
@@ -858,6 +956,7 @@ function fillForm(req) {
     field(key).value = req[key] ?? ""; // e.g. clears a BUFKIT run date for a "latest run" link
   }
   field("site")?.dispatchEvent(new Event("input")); // highlights it on the map
+  field("hour")?.dispatchEvent(new Event("change")); // updates the map's launch list
 }
 
 // Opens the sounding described by the current URL; returns false if there isn't one.

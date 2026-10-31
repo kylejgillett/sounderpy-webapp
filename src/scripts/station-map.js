@@ -98,6 +98,8 @@ const COLORS = { dot: "#f3ead6", edge: "#1a1712", picked: "#ffffff", pickedEdge:
 const DOT = { radius: 4.5, weight: 1.5, color: COLORS.edge, fillColor: COLORS.dot, fillOpacity: 1 };
 const PICKED = { radius: 8, weight: 3, color: COLORS.pickedEdge, fillColor: COLORS.picked, fillOpacity: 1 };
 // Background reference points (e.g. every airport on the ACARS map).
+const LAUNCHED = { radius: 9, weight: 1.5, color: COLORS.edge, fillColor: "#7fc28a", fillOpacity: 1 };
+const LAUNCHED_OLDER = { ...LAUNCHED, fillColor: "#a9a88a" };
 export const FAINT_DOT = { radius: 3, weight: 1, color: COLORS.edge, fillColor: "#cdc3a9", fillOpacity: 0.8 };
 
 // ---- Live radar: IEM's NEXRAD base-reflectivity composite (CONUS, every 5 minutes) ----
@@ -190,6 +192,18 @@ export function stationLayer(map, rows, { onPick, style = DOT, popup = true }) {
   }
   const entries = new Map();
   let picked = null;
+  let launched = new Map(), launchedOnly = false; // id -> { hour, when, fresh }
+  const launchOf = (entry) => launched.get(entry.row[0].toUpperCase());
+  const launchStyle = (launch) => (launch.fresh ? LAUNCHED : LAUNCHED_OLDER);
+  const restyle = (entry) => {
+    const launch = launchOf(entry);
+    entry.marker.setStyle(entry === picked ? { ...PICKED, radius: launch ? LAUNCHED.radius : PICKED.radius } : launch ? launchStyle(launch) : style);
+  };
+  const labelIcon = (id, hour) => L.divIcon({
+    className: "spy-station-label",
+    html: `<span class="${hour ? "has-launch" : ""}">${esc(id)}</span>${hour ? `<b>${esc(hour)}</b>` : ""}`,
+    iconSize: null,
+  });
 
   // Main sites (4-character IDs like KOAX) win when stations crowd the same spot.
   const ordered = [...rows].sort((a, b) => (b[0].length === 4) - (a[0].length === 4));
@@ -199,7 +213,7 @@ export function stationLayer(map, rows, { onPick, style = DOT, popup = true }) {
       .on("click", () => { select(row[0]); onPick(row); });
     const label = L.marker([row[3], row[4]], {
       pane: "station-labels", interactive: false, keyboard: false,
-      icon: L.divIcon({ className: "spy-station-label", html: `<span>${esc(row[0])}</span>`, iconSize: null }),
+      icon: labelIcon(row[0]),
     });
     entries.set(row[0].toUpperCase(), { marker, label, row });
   }
@@ -215,9 +229,11 @@ export function stationLayer(map, rows, { onPick, style = DOT, popup = true }) {
       visible.add(entry);
     };
     if (picked) { claim(picked); visible.add(picked); }
-    for (const entry of entries.values()) {
-      if (entry !== picked && bounds.contains(entry.marker.getLatLng())) claim(entry);
-    }
+    // Launched sites win the crowded spots too.
+    const inView = [...entries.values()].filter((entry) => entry !== picked && bounds.contains(entry.marker.getLatLng()));
+    const isLaunched = (entry) => launched.has(entry.row[0].toUpperCase());
+    inView.filter(isLaunched).forEach(claim);
+    if (!launchedOnly) inView.filter((entry) => !isLaunched(entry)).forEach(claim);
     for (const entry of entries.values()) {
       const show = visible.has(entry);
       for (const layer of [entry.marker, entry.label]) {
@@ -232,17 +248,63 @@ export function stationLayer(map, rows, { onPick, style = DOT, popup = true }) {
 
   function select(id, { pan = false } = {}) {
     const hit = entries.get(String(id).trim().toUpperCase());
-    if (picked) picked.marker.setStyle(style);
+    const previous = picked;
     picked = hit ?? null;
+    if (previous) restyle(previous);
     if (!hit) return false;
-    hit.marker.setStyle(PICKED);
+    restyle(hit);
     update(); // make sure the picked station is shown even where its neighbours win
     if (popup) hit.marker.bindPopup(stationPopup(hit.row), { className: "spy-popup" }).openPopup();
     if (pan) map.setView(hit.marker.getLatLng(), Math.max(map.getZoom(), 6));
     return true;
   }
 
-  return { select };
+  /** Show each launch's hour inside its site's icon. `only` hides the rest (the picked site always stays). */
+  function setLaunches(launches, only) {
+    launched = launches;
+    launchedOnly = only;
+    entries.forEach((entry) => {
+      const launch = launchOf(entry), [id, name] = entry.row;
+      restyle(entry);
+      entry.label.setIcon(labelIcon(id, launch?.hour));
+      entry.marker.setTooltipContent(`${esc(id)} · ${esc(name)}${launch ? `<br>Launch: ${esc(launch.when)}` : ""}`);
+    });
+    update();
+  }
+
+  return { select, setLaunches };
+}
+
+/** A small row of launch-time buttons. onSelect(view) runs with the clicked button's view. */
+export function launchControl(map, views, onSelect) {
+  map.attributionControl.addAttribution('Launches: <a href="https://mesonet.agron.iastate.edu/">IEM</a>');
+  const control = L.control({ position: "topleft" });
+  control.onAdd = () => {
+    const box = L.DomUtil.create("div", "spy-launch-views");
+    box.setAttribute("role", "group");
+    box.setAttribute("aria-label", "Launches to show");
+    box.innerHTML = views.map(([view, text]) => `<button type="button" data-view="${esc(view)}" aria-pressed="false">${esc(text)}</button>`).join("");
+    L.DomEvent.disableClickPropagation(box);
+    box.addEventListener("click", (e) => {
+      const view = e.target.closest("button")?.dataset.view;
+      if (view) onSelect(view);
+    });
+    return box;
+  };
+  control.addTo(map);
+  const button = (view) => control.getContainer().querySelector(`[data-view="${view}"]`);
+  return {
+    setActive(active) {
+      for (const [view] of views) button(view).setAttribute("aria-pressed", String(view === active));
+    },
+    setView(view, { title = "", disabled = false } = {}) {
+      button(view).title = title;
+      button(view).disabled = disabled;
+    },
+    setLoading(view, loading) {
+      button(view).classList.toggle("is-loading", loading);
+    },
+  };
 }
 
 /** Click anywhere to drop a pin (reanalysis points). */

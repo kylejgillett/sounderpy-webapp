@@ -1,0 +1,9 @@
+[Unit]
+Description=Update the list of recent SounderPy RAOB launches
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/sounderpy-webapp/server
+ExecStart=/root/sounderpy-webapp/server/venv/bin/python launches.py

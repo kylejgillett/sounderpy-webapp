@@ -38,6 +38,24 @@
   text-shadow: 0 0 3px #1a1712, 0 0 2px #1a1712;
 }
 
+/* A launch's hour sits inside its site's icon, and the ID moves up to clear the larger dot. */
+.spy-station-label span.has-launch { transform: translate(-50%, calc(-100% - 10px)); }
+.spy-station-label b {
+  position: absolute; transform: translate(-50%, -50%);
+  color: #1a1712; font-size: 10px; font-weight: 800; line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+}
+
+/* Launch-time buttons: a slim stack under the zoom buttons */
+.spy .spy-launch-views { display: flex; flex-direction: column; margin-top: 6px !important; border: 1px solid #6e6754; border-radius: 6px; overflow: hidden; background: rgb(74 72 64 / 92%); }
+.spy-launch-views button { display: flex; align-items: center; gap: .3rem; padding: .2rem .4rem; border: 0; border-top: 1px solid #6e6754; background: transparent; color: #efe6cf; font: inherit; font-size: 11px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.spy-launch-views button:first-child { border-top: 0; }
+.spy-launch-views button:hover:not(:disabled) { background: #5a574d; }
+.spy-launch-views button[aria-pressed="true"] { background: #7fc28a; color: #1a1712; }
+.spy-launch-views button:disabled { color: #8f8a78; cursor: default; }
+.spy-launch-views button.is-loading::after { content: ""; width: 9px; height: 9px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spy-launch-spin .8s linear infinite; }
+@keyframes spy-launch-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spy-launch-views button.is-loading::after { animation: none; } }
+
 /* Phones: how to move the map */
 .spy-map-touch-note { padding: .15rem .5rem; border-radius: 4px; background: rgb(74 72 64 / 88%); color: #efe6cf; font-size: 11px; pointer-events: none; }
 
