@@ -6,7 +6,7 @@ import { RELEASES } from '../data/whats-new.js';
 const { title = 'SounderPy Sounding Analysis', description = 'Plot observed, aircraft, model forecast, and reanalysis soundings with SounderPy, right in your browser.' } = Astro.props;
 const currentPath = Astro.url.pathname.replace(/\/+$/, '') || '/';
 const isHome = currentPath === (sitePath('/').replace(/\/+$/, '') || '/');
-const pageTitle = title.includes('SounderPy') ? title : `${title} | SounderPy Sounding Analysis`;
+const pageTitle = title.toLowerCase().includes('sounderpy') ? title : `${title} | SounderPy Sounding Analysis`;
 // Link previews (Slack, Discord, iMessage, social media) need absolute URLs.
 const pageUrl = new URL(Astro.url.pathname, Astro.site);
 const cardUrl = new URL(sitePath('/og-card.jpg'), Astro.site);
@@ -29,7 +29,7 @@ const links = [
     <title>{pageTitle}</title>
     <link rel="canonical" href={pageUrl} />
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="SounderPy" />
+    <meta property="og:site_name" content="sounderpy.app" />
     <meta property="og:title" content={pageTitle} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={pageUrl} />
@@ -39,6 +39,7 @@ const links = [
     <meta property="og:image:alt" content="SounderPy Sounding Analysis: a dark-mode sounding and hodograph for Moore, Oklahoma, 20 May 2013, next to the SounderPy logo." />
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="icon" href={sitePath('/favicon.png')} type="image/png" />
+    <slot name="head" />
   </head>
   <body>
     <header class="site-header" style={`--header-map: url("${sitePath('/500_heights.gif')}")`}>

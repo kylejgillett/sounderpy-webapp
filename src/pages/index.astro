@@ -11,10 +11,27 @@ import ErrorDialog from "../components/sounding/ErrorDialog.astro";
 import ImageViewer from "../components/sounding/ImageViewer.astro";
 import WhatsNew from "../components/sounding/WhatsNew.astro";
 import "../styles/sounding-analysis.css";
-const title = "SounderPy Sounding Analysis";
+const title = "Sounding Analysis with sounderpy.app";
 const description = "Plot observed, aircraft, model forecast, and reanalysis soundings with SounderPy right in your browser.";
+const webApp = {
+  '@context': 'https://schema.org',
+  '@type': 'WebApplication',
+  name: 'sounderpy.app',
+  alternateName: ['SounderPy Web App', 'SounderPy Sounding Analysis'],
+  url: 'https://sounderpy.app/',
+  description,
+  applicationCategory: 'WeatherApplication',
+  operatingSystem: 'Any',
+  browserRequirements: 'Requires JavaScript',
+  isAccessibleForFree: true,
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  author: { '@type': 'Person', name: 'Kyle J. Gillett', url: 'https://kylegillettphoto.com/' },
+  softwareHelp: { '@type': 'CreativeWork', url: 'https://kylejgillett.github.io/sounderpy/' },
+  sameAs: ['https://github.com/kylejgillett/sounderpy'],
+};
 ---
 <BaseLayout title={title} description={description}>
+  <script slot="head" type="application/ld+json" set:html={JSON.stringify(webApp)} />
   <article class="container spy">
     <!-- The site header shows the title; this keeps a page heading for screen readers. -->
     <h1 class="spy-sr-only">{title}</h1>
