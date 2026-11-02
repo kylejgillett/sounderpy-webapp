@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#302d29" />
+  <title>You're offline · sounderpy.app</title>
+  <style>
+    body { display: grid; min-height: 100vh; min-height: 100dvh; margin: 0; padding: 1.5rem; box-sizing: border-box; place-items: center; background: #302d29; color: #f6ebd2; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; text-align: center; }
+    main { max-width: 26rem; }
+    img { width: 96px; height: 96px; border-radius: 22px; }
+    h1 { margin: 1rem 0 .5rem; font-family: Georgia, serif; font-size: 1.6rem; font-weight: 600; }
+    p { margin: 0 0 1.5rem; color: #d9c9a7; line-height: 1.5; }
+    button { min-height: 3rem; padding: .6rem 1.75rem; border: 1px solid #d2bd8a; border-radius: 8px; background: #d2bd8a; color: #2a241c; font: inherit; font-weight: 700; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="/icons/icon-192.png" alt="" width="96" height="96" />
+    <h1>You're offline</h1>
+    <p>SounderPy needs a connection to fetch data and draw plots. Reconnect and try again.</p>
+    <button type="button" onclick="location.reload()">Try again</button>
+  </main>
+</body>
+</html>

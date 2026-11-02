@@ -49,6 +49,10 @@ const downloads = [
   </div>
 
   <div class="spy-downloads" aria-label="Download this sounding">
+    <button class="spy-download" type="button" data-share hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4m0 0L8 8m4-4 4 4" /><path d="M7 11H6a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7a1 1 0 0 0-1-1h-1" /></svg>
+      <span>Share<small>send this plot</small></span>
+    </button>
     {downloads.map(({ type, label, note }) => {
       const Tag = type === "png" ? "a" : "button";
       return (

@@ -2,6 +2,7 @@
 // src/components/sounding/* inside an element with class "spy".
 
 import { createViewer } from "./image-viewer.js";
+import { readSoundingFile } from "./sounding-file.js";
 
 // `npm run dev` talks to a local API (uvicorn api:app --port 8000); builds use the droplet.
 const API = (import.meta.env.PUBLIC_SOUNDERPY_API
@@ -12,8 +13,10 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const status = $(".spy-status");
 const result = $(".spy-result");
 const settingsEl = $("#settings");
+const isMobile = window.matchMedia?.("(pointer: coarse)").matches ?? false; // phones and tablets get the app-like extras
 let lastRequest = null;
 let lastShareUrl = null; // address of the sounding on screen, with the settings it was made with
+let lastPlotFile = null; // the plot on screen as a file, ready for the phone's share sheet
 
 // ---- API ------------------------------------------------------------------
 
@@ -74,7 +77,7 @@ function readSettings() {
     hodo: f("hodo").checked,
     sr_hodo: f("sr_hodo").checked,
     hodo_boundary_angle: num(f("hodo_boundary_angle").value),
-    map_zoom: num(f("map_zoom").value) ?? 0,
+    map_zoom: Math.min(num(f("map_zoom").value) ?? 0, 4), // the server's limit, for old share links too
     radar: f("radar").value || null,
     radar_time: f("radar_time").value || null,
     storm_motion: smDir !== null && smSpd !== null ? [smDir, smSpd] : f("storm_motion").value,
@@ -90,6 +93,7 @@ function parseHour(value) {
 }
 
 function buildRequest(form) {
+  if (form.dataset.source === "upload") return uploadRequest(form);
   const data = Object.fromEntries(new FormData(form));
   const req = { source: form.dataset.source, settings: readSettings() };
 
@@ -117,6 +121,7 @@ const SOURCE_NAMES = {
   bufkit: "Model forecast · BUFKIT",
   reanalysis: "Model reanalysis · RAP-RUC",
   composite: "Composite soundings · Experimental",
+  upload: "User-supplied data · Not verified by SounderPy",
 };
 const pad2 = (v) => String(v).padStart(2, "0");
 const titleCase = (s) => (s && s === s.toUpperCase() && s.length > 3
@@ -133,6 +138,7 @@ function describeRequest(req) {
     bufkit: [req.model?.toUpperCase(), req.site?.toUpperCase(), `F${pad2(req.fcst_hr)}`, req.hour ? `run ${when}` : "latest run"],
     reanalysis: ["RAP-RUC", req.lat != null ? coords(req.lat, req.lon) : "", when],
     composite: [`Composite of ${req.profiles?.length} soundings`],
+    upload: [req.title || "Custom Sounding", req.date && `${req.date} ${req.time}Z`],
   }[req.source];
   if (req.settings.hodo) parts.push("hodograph");
   return parts.filter(Boolean).join("  ·  ");
@@ -198,7 +204,7 @@ function stopLoading() {
   result.setAttribute("aria-busy", "false");
 }
 
-function renderCaption(req, label, info) {
+function renderCaption(req, label, info, levels) {
   const caption = $(".spy-caption");
   const meta = $(".spy-meta");
   meta.replaceChildren();
@@ -213,6 +219,11 @@ function renderCaption(req, label, info) {
   if (!info) {
     $(".spy-kicker").textContent = SOURCE_NAMES[req.source];
     $(".spy-title").textContent = label;
+    if (req.source === "upload") {
+      row("Valid", `${req.time} UTC ${req.date}`);
+      row("At", [req.location, coords(req.lat, req.lon)].filter(Boolean).join(", "));
+      if (levels.plotted < levels.received) row("Levels", `${levels.plotted} plotted of ${levels.received.toLocaleString()} in the file`);
+    }
     caption.hidden = false;
     return;
   }
@@ -240,6 +251,8 @@ function clearResult() {
   clearInterval(timer);
   lastRequest = null;
   lastShareUrl = null;
+  lastPlotFile = null;
+  updateShareButton();
   delete $(".spy").dataset.result;
   const img = $("img", result);
   img.removeAttribute("src");
@@ -260,23 +273,26 @@ function getSounding(form) {
 // `record` adds the sounding to the address bar and browser history (see shareable links below).
 async function runSounding(req, { record = false } = {}) {
   const id = ++requestId;
-  const isComposite = req.source === "composite";
-  const shareUrl = isComposite ? null : requestUrl(req); // captured now, so later setting changes don't alter it
+  const isComposite = req.source === "composite", isUpload = req.source === "upload";
+  const shareUrl = isComposite || isUpload ? null : requestUrl(req); // captured now, so later setting changes don't alter it
   setBusy(true);
   startLoading(req);
   result.scrollIntoView({ behavior: "smooth", block: "nearest" });
   try {
-    const { label, info, image } = await (await api(isComposite ? "/api/composite" : "/api/sounding", req)).json();
+    const path = isComposite ? "/api/composite" : isUpload ? "/api/upload-sounding" : "/api/sounding";
+    const { label, info, image, levels } = await (await api(path, req)).json();
     if (id !== requestId) return;
     lastRequest = req;
-    $(".spy").dataset.result = isComposite ? "composite" : "sounding"; // composites hide data-file downloads
-    renderCaption(req, label, info);
+    $(".spy").dataset.result = isComposite ? "composite" : isUpload ? "upload" : "sounding"; // these two hide data-file downloads
+    renderCaption(req, label, info, levels);
     const img = $("img", result);
     img.src = image;
     img.alt = label;
     $('[data-download="png"]').href = image;
     lastShareUrl = shareUrl;
-    if (record && shareUrl !== location.pathname + location.search) history.pushState(null, "", shareUrl);
+    preparePlotFile(image, id);
+    jumpToPlot(img, id);
+    if (record && shareUrl && shareUrl !== location.pathname + location.search) history.pushState(null, "", shareUrl);
     setBusy(false);
     stopLoading();
   } catch (err) {
@@ -285,6 +301,45 @@ async function runSounding(req, { record = false } = {}) {
     showError(err, isComposite ? "Couldn't build that composite" : "Couldn't get that sounding");
   }
 }
+
+// Bring the finished plot into view, once it's ready to paint so the page doesn't shift underneath.
+async function jumpToPlot(img, id) {
+  if (!isMobile) return;
+  await img.decode?.().catch(() => {});
+  if (id !== requestId || document.hidden) return;
+  const calm = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  result.scrollIntoView({ behavior: calm ? "instant" : "smooth", block: "start" });
+  try { navigator.vibrate?.(40); } catch { /* no vibration here */ }
+}
+
+// ---- Share: the phone's own share sheet. Phones that can't share files share the link instead. ----
+
+const shareButton = $("[data-share]");
+const canShareFile = () => Boolean(lastPlotFile && navigator.canShare?.({ files: [lastPlotFile] }));
+
+function updateShareButton() {
+  shareButton.hidden = !(isMobile && navigator.share && (canShareFile() || lastShareUrl));
+}
+
+// Made ahead of time: browsers only allow sharing straight after the tap.
+async function preparePlotFile(image, id) {
+  try {
+    const blob = await (await fetch(image)).blob();
+    if (id !== requestId) return;
+    lastPlotFile = new File([blob], "sounderpy_plot.png", { type: "image/png" });
+  } catch { /* the link can still be shared */ }
+  updateShareButton();
+}
+
+shareButton.addEventListener("click", async () => {
+  const note = $("small", shareButton);
+  const title = $(".spy-title").textContent;
+  try {
+    await navigator.share(canShareFile() ? { files: [lastPlotFile], title } : { title, url: new URL(lastShareUrl, location.origin).href });
+  } catch (err) {
+    if (err.name !== "AbortError") flash(note, "couldn't share, use PNG", "send this plot"); // AbortError: they closed the sheet
+  }
+});
 
 // `button` (the one clicked) pulses while the file is prepared, which matters inside the
 // full-screen viewer where the status line is hidden.
@@ -469,6 +524,14 @@ async function initMap(form) {
         const [lat, lon] = form.coords.value.split(",").map(Number);
         if (Number.isFinite(lat) && Number.isFinite(lon)) picker.set(lat, lon, { pan: true });
       });
+    } else if (source === "upload") {
+      const picker = pointPicker(map, { onPick: (lat, lon) => { form.lat.value = lat; form.lon.value = lon; } });
+      const follow = () => {
+        const lat = num(form.lat.value), lon = num(form.lon.value);
+        if (Number.isFinite(lat) && Number.isFinite(lon)) picker.set(lat, lon, { pan: true });
+      };
+      form.lat.addEventListener("change", follow);
+      form.lon.addEventListener("change", follow);
     } else if (source === "acars") {
       // Every airport as a faint dot (click to search it), then search results on top.
       // Clicking an airport searches it straight away.
@@ -500,14 +563,34 @@ const CREDITS = {
   bufkit: "Forecast soundings: Penn State BUFKIT feed and Iowa State IEM BUFKIT feed.",
   reanalysis: "Reanalysis: RAP and RUC model analyses from NOAA NCEI.",
   composite: "Composites combine the data sources of the profiles you add.",
+  upload: "Uploaded soundings: data supplied by the user and not verified by SounderPy.",
 };
+
+// The installed app reopens on the tab you used last; a browser visit starts as usual.
+const LAST_TAB = "sounderpy-last-tab";
+const isInstalled = () => window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone === true;
+function startTab() {
+  if (!isMobile || !isInstalled()) return "raob";
+  try {
+    const saved = localStorage.getItem(LAST_TAB);
+    return isTab(saved) ? saved : "raob";
+  } catch { return "raob"; }
+}
+
+// The phone-sized button that opens the tabs names the current one.
+const tabsToggle = $(".spy-tabs-toggle");
+function updateTabsToggle() {
+  $("span", tabsToggle).textContent = $('[data-tab][aria-selected="true"]').textContent;
+}
 
 let currentTab = null;
 function showTab(name, { keepUrl = false } = {}) {
   if (currentTab && currentTab !== name) clearResult();
   currentTab = name;
+  try { localStorage.setItem(LAST_TAB, name); } catch { /* not remembered */ }
   $(".spy-credit").textContent = CREDITS[name];
   $$("[data-tab]").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.tab === name)));
+  updateTabsToggle();
   $$(".spy-panel").forEach((p) => {
     p.hidden = p.dataset.source !== name;
     if (!p.hidden) initMap(p);
@@ -523,7 +606,7 @@ const now = new Date();
 const today = now.toISOString().slice(0, 10);
 const utcHour = now.getUTCHours();
 for (const form of $$(".spy-panel")) {
-  if (form.dataset.source !== "bufkit" && !form.date.value) form.date.value = today;
+  if (!["bufkit", "upload"].includes(form.dataset.source) && !form.date.value) form.date.value = today;
 }
 // RAOB opens on the newest 00 or 12Z launch that's been checked, an hour after launch,
 // so this can still be yesterday's date just after 00Z.
@@ -538,7 +621,13 @@ for (const input of $$('.spy-panel:not([data-source="acars"]) [name="hour"]')) {
   input.addEventListener("input", () => input.setCustomValidity(!input.value.trim() || parseHour(input.value) ? "" : HOUR_MESSAGE));
 }
 
-$$("[data-tab]").forEach((t) => t.addEventListener("click", () => showTab(t.dataset.tab)));
+$$("[data-tab]").forEach((t) => t.addEventListener("click", () => {
+  showTab(t.dataset.tab);
+  tabsToggle.setAttribute("aria-expanded", "false");
+}));
+tabsToggle.addEventListener("click", () => {
+  tabsToggle.setAttribute("aria-expanded", String(tabsToggle.getAttribute("aria-expanded") !== "true"));
+});
 // A form moved into the Add profile pop-up saves a profile; otherwise it gets a sounding.
 $$(".spy-panel").forEach((form) => form.addEventListener("submit", (e) => {
   e.preventDefault();
@@ -741,6 +830,7 @@ function renderProfiles() {
   $("[data-add-profile]").disabled = full;
   $("[data-build-composite]").disabled = profiles.length < MIN_PROFILES;
   $('[data-tab="composite"]').textContent = profiles.length ? `Composite soundings (${profiles.length})` : "Composite soundings";
+  updateTabsToggle();
 
   const action = (label, handler, disabled = false) => {
     const button = document.createElement("button");
@@ -867,6 +957,103 @@ $('.spy-composite-options [name="cmap"]').addEventListener("change", (e) => {
 $("[data-build-composite]").addEventListener("click", () => runSounding(compositeRequest()));
 renderProfiles();
 
+// ---- Upload tab: read a sounding file here, then send its numbers ----------------------
+
+const uploadForm = $('[data-source="upload"]');
+const uploadSummary = $(".spy-upload-summary");
+const uploadName = $(".spy-upload-name");
+const UPLOAD_PROMPT = uploadName.textContent;
+let uploaded = null; // what was read from the chosen file
+let filledFrom = {}; // what the last file put in each box, so a new file replaces only that
+
+// Set a box from the file, unless the user has typed their own value.
+function fillFromFile(field, value) {
+  if (!field.value || field.value === filledFrom[field.name]) field.value = value;
+  filledFrom[field.name] = value;
+}
+
+// The file's name without its extension, as a title the server accepts.
+const titleFromFile = (name, length = 40) => name.replace(/\.[^.]*$/, "").replace(/[^\p{L}\p{N}_ .,:;'()/#+|-]+/gu, " ").trim().slice(0, length).trim();
+
+// "23", "23Z", "2315", "23:15" -> "23:15"; anything else -> null. Text, not a time box, so it's always 24-hour.
+function parseTime(value) {
+  const m = /^(\d{1,2})(?::?(\d{2}))?\s*z?$/i.exec(String(value).trim());
+  return m && Number(m[1]) <= 23 && Number(m[2] ?? 0) <= 59 ? `${m[1].padStart(2, "0")}:${m[2] ?? "00"}` : null;
+}
+
+function uploadRequest(form) {
+  if (!uploaded) throw new Error("Choose a sounding file first.");
+  const time = parseTime(form.time.value);
+  if (!time) throw new Error("Enter a UTC time from 0000 to 2359, e.g. 2315.");
+  return {
+    source: "upload",
+    title: form.title.value,
+    location: form.location.value,
+    right_title: form.use_filename.checked ? titleFromFile(form.file.files[0].name, 30) : "",
+    date: form.date.value,
+    time,
+    lat: num(form.lat.value),
+    lon: num(form.lon.value),
+    ...(uploaded.format === "cm1"
+      ? { cm1: { surface_pressure: uploaded.surface[0], surface_theta: uploaded.surface[1], surface_qv: uploaded.surface[2], rows: uploaded.rows, elevation: num(form.elevation.value) } }
+      : { rows: uploaded.rows }),
+    settings: readSettings(),
+  };
+}
+
+// "Use my location": asks only when tapped, and stays on this device until a plot is made.
+const locateButton = $("[data-locate]");
+locateButton.hidden = !isMobile || !navigator.geolocation;
+locateButton.addEventListener("click", () => {
+  const label = $("span", locateButton);
+  label.textContent = "Finding you…";
+  locateButton.disabled = true;
+  const done = () => { label.textContent = "Use my location"; locateButton.disabled = false; };
+  navigator.geolocation.getCurrentPosition((position) => {
+    done();
+    uploadForm.lat.value = position.coords.latitude.toFixed(3);
+    uploadForm.lon.value = position.coords.longitude.toFixed(3);
+    uploadForm.lon.dispatchEvent(new Event("change")); // moves the map pin
+  }, (err) => {
+    done();
+    showError(new Error(err.code === err.PERMISSION_DENIED
+      ? "Location access is turned off for this site. You can allow it in your settings, or click the map instead."
+      : "Your location couldn't be found right now. Try again, or click the map instead."), "Couldn't get your location");
+  }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+});
+
+// Highlight the drop area while a file is dragged over it.
+for (const [type, over] of [["dragenter", true], ["dragleave", false], ["drop", false]]) {
+  uploadForm.file.addEventListener(type, () => uploadForm.file.parentElement.classList.toggle("is-over", over));
+}
+
+uploadForm.file.addEventListener("change", async () => {
+  const file = uploadForm.file.files[0];
+  uploaded = null;
+  uploadName.textContent = file?.name ?? UPLOAD_PROMPT;
+  uploadSummary.textContent = "";
+  uploadSummary.classList.remove("is-error");
+  if (!file) return;
+  try {
+    const read = await readSoundingFile(file);
+    if (uploadForm.file.files[0] !== file) return; // another file was chosen meanwhile
+    uploaded = read;
+    $("[data-cm1-only]", uploadForm).hidden = read.format !== "cm1";
+    fillFromFile(uploadForm.title, titleFromFile(file.name));
+    fillFromFile(uploadForm.location, read.site);
+    if (read.date) uploadForm.date.value = read.date;
+    if (read.time) uploadForm.time.value = read.time;
+    const skipped = read.skipped ? `, ${read.skipped} skipped for missing values` : "";
+    const format = read.format === "cm1" ? "CM1" : "SHARPpy";
+    uploadSummary.textContent = `Read ${read.rows.length.toLocaleString()} ${format} levels${skipped}.`;
+  } catch (err) {
+    uploadForm.file.value = "";
+    uploadName.textContent = UPLOAD_PROMPT;
+    uploadSummary.textContent = err.message;
+    uploadSummary.classList.add("is-error");
+  }
+});
+
 // ---- What's new: a dot on the link until this browser has opened the latest notes ---
 
 const WHATS_NEW_SEEN = "sounderpy-whats-new-seen";
@@ -948,7 +1135,7 @@ function requestUrl(req) {
 function requestFromUrl() {
   const params = new URLSearchParams(location.search);
   const source = params.get("source");
-  if (!isTab(source) || source === "composite") return null; // composites have no share links yet
+  if (!isTab(source) || source === "composite" || source === "upload") return null; // composites have no share links yet, and uploads are never stored
   const req = { source };
   for (const key of REQUEST_KEYS) if (params.get(key)) req[key] = params.get(key);
   if (req.fcst_hr != null) req.fcst_hr = Number(req.fcst_hr);
@@ -1009,7 +1196,7 @@ $("[data-copy-link]").addEventListener("click", async (e) => {
 if (!openFromUrl()) {
   applySettings(savedSettings());
   const tab = location.hash.slice(1);
-  showTab(isTab(tab) ? tab : "raob");
+  showTab(isTab(tab) ? tab : startTab());
 }
 loadLatestRuns();
 
@@ -1042,6 +1229,12 @@ function tickClock() {
 }
 tickClock();
 setInterval(tickClock, 1000);
+
+// ---- Offline: a small service worker (public/sw.js) shows a tidy page when there's no connection ---
+
+if (import.meta.env.PROD && isMobile && "serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch(() => { /* the site works the same without it */ });
+}
 
 // ---- Footer: copy the citation ----------------------------------------------------
 

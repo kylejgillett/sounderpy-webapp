@@ -3,11 +3,22 @@
 // The newest release's `version` shows in the site footer.
 // `notice` is optional: a highlighted heading and line for that release's biggest news.
 export const RELEASES = [
+
   {
-    id: "2026-10",
+    id: "2026-11-02",
     version: "2026.10.30",
-    date: "October 2026",
+    date: "November 2nd, 2026",
     notice: { heading: "This is the NEW SounderPy App!", text: "Update your bookmarks to sounderpy.app" },
+    items: [
+      "Custom Soundings: capability to upload and plot custom SHARPpy (.txt, .sharppy) and CM1 input_sounding (.txt, .snd, or no extension), soundings. Max upload is 1 MB. Plots are fully customizable.",
+      "Mobile: improved mobile experience.",
+    ],
+  },
+
+  {
+    id: "2026-10-30",
+    version: "2026.10.30",
+    date: "October 30th, 2026",
     items: [
       "Composite soundings (experimental): overlay up to 6 profiles of any data type, such as forecast timeseries",
       "Recent RAOB launches: the RAOb station site map now shows (sortable) recent launch times. Available profiles, based on date/time inputs, will update on the map.",

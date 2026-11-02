@@ -1,5 +1,5 @@
 ---
-// The four request forms (one per data source); SourceTabs switches between them.
+// The request forms (one per data source); SourceTabs switches between them.
 // Each is two columns: the map on the left, the request details on the right.
 import FormActions from "./FormActions.astro";
 ---
@@ -70,6 +70,49 @@ import FormActions from "./FormActions.astro";
       <label>Coordinates<input name="coords" required placeholder="lat, lon (e.g. 45.6, -86.7)" autocomplete="off" /></label>
       <label>Date (UTC)<input name="date" type="date" required value="2024-08-28" /></label>
       <label>Hour (UTC)<input name="hour" required inputmode="numeric" value="23" placeholder="e.g. 18" /></label>
+    </div>
+    <FormActions />
+  </div>
+</form>
+
+<form class="spy-panel spy-upload" data-source="upload" hidden>
+  <div class="spy-upload-start">
+    <div class="spy-map" role="region" aria-label="Sounding location map"></div>
+    <p class="spy-hint" id="spy-upload-about">A SHARPpy file (.txt, .sharppy) or CM1 input_sounding (.txt, .snd, or no extension), up to 1 MB. Your file is read in this browser, and only its numbers and your labels are sent to draw the plot. Nothing is saved. Files with many levels are thinned to 150 evenly spaced levels.</p>
+    <p class="spy-hint">Want more control? You can also <a href="https://kylejgillett.github.io/sounderpy/customdatasources.html" target="_blank" rel="noopener">plot your own data with code</a> using the SounderPy Python package.</p>
+  </div>
+  <div class="spy-side">
+    <label class="spy-upload-drop">
+      <input name="file" type="file" aria-describedby="spy-upload-about" />
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5" /><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4" /></svg>
+      <span class="spy-upload-text">
+        <strong>Upload a SHARPpy or CM1 file</strong>
+        <span class="spy-upload-name">Drop it here, or click to choose</span>
+        <span class="spy-upload-summary" role="status" aria-live="polite"></span>
+      </span>
+    </label>
+    <div class="spy-step">
+      <h3>Time and place</h3>
+      <div class="spy-fields">
+        <label>Date (UTC)<input name="date" type="date" required /></label>
+        <label>Time (UTC)<input name="time" required inputmode="numeric" placeholder="e.g. 2315" autocomplete="off" /></label>
+        <label>Latitude<input name="lat" type="number" step="any" min="-90" max="90" required placeholder="e.g. 46.88" /></label>
+        <label>Longitude<input name="lon" type="number" step="any" min="-180" max="180" required placeholder="e.g. -102.79" /></label>
+        <label class="spy-wide" data-cm1-only hidden>Surface elevation in meters (optional)<input name="elevation" type="number" step="any" min="-500" max="9000" placeholder="CM1 files don't include it, so it's estimated if blank" /></label>
+      </div>
+      <button class="spy-secondary spy-locate" type="button" data-locate hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 3v3m0 12v3M3 12h3m12 0h3" /></svg>
+        <span>Use my location</span>
+      </button>
+      <p class="spy-step-note">Click the map to set the latitude and longitude. Radar uses this date and time unless you set a radar time under Customize figure.</p>
+    </div>
+    <div class="spy-step">
+      <h3>Plot titles</h3>
+      <div class="spy-fields">
+        <label class="spy-wide">Main title (optional)<input name="title" maxlength="50" placeholder="e.g., Field Campaign Observed Sounding | IOP 26" autocomplete="off" /></label>
+        <label class="spy-wide">Location name (optional)<input name="location" maxlength="30" placeholder="e.g. Dickinson, ND" autocomplete="off" /></label>
+      </div>
+      <label class="spy-check"><input name="use_filename" type="checkbox" /><span>Add filename to plot titles</span></label>
     </div>
     <FormActions />
   </div>

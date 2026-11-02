@@ -1,10 +1,16 @@
 ---
 // Data-source tabs; sounding-app.js shows the matching form from SourceForms.
+// On phones the tabs collapse behind a button naming the current one.
 ---
-<div class="spy-tabs" role="tablist" aria-label="Data source">
+<button class="spy-tabs-toggle" type="button" aria-expanded="false" aria-controls="spy-tabs">
+  <span>Observed (RAOB)</span>
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+</button>
+<div class="spy-tabs" id="spy-tabs" role="tablist" aria-label="Data source">
   <button type="button" role="tab" data-tab="raob" aria-selected="true">Observed (RAOB)</button>
   <button type="button" role="tab" data-tab="acars" aria-selected="false">Aircraft (ACARS)</button>
   <button type="button" role="tab" data-tab="bufkit" aria-selected="false">Model Forecast (BUFKIT)</button>
   <button type="button" role="tab" data-tab="reanalysis" aria-selected="false">Reanalysis (RAP-RUC)</button>
   <button type="button" role="tab" data-tab="composite" aria-selected="false">Composite soundings</button>
+  <button type="button" role="tab" data-tab="upload" aria-selected="false">Custom Sounding</button>
 </div>

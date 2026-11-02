@@ -8,6 +8,7 @@ Run from this folder with:
 import base64
 import io
 import logging
+import math
 import os
 import re
 import threading
@@ -18,20 +19,25 @@ from functools import lru_cache
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Literal, Optional, Union
+from collections import defaultdict, deque
+from typing import Annotated, Literal, Optional, Union
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 import diskcache
+import metpy.calc as mpcalc
+import numpy as np
 import pandas as pd
 import requests
 import sounderpy as spy
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from metpy.units import units
+from pydantic import BaseModel, Field, FiniteFloat, ValidationError, field_validator, model_validator
 
 from launches import get_launches, recent_launches
 
@@ -96,6 +102,54 @@ PROFILE_CACHE = diskcache.Cache(
     eviction_policy="least-recently-used",
 )
 
+# Uploaded soundings. The browser reads the file; this API only ever receives numbers and short labels,
+# and keeps nothing: no disk, no cache, and only the level count and timing in the log.
+UPLOADS_ENABLED = os.environ.get("UPLOADS_ENABLED", "1") != "0"  # off switch if uploads are ever abused
+UPLOAD_MAX_BODY_BYTES = 1024 ** 2
+UPLOAD_MAX_LEVELS = 10_000
+UPLOAD_CM1_MAX_LEVELS = 2_000  # SounderPy's reader converts level by level, which is slow
+UPLOAD_MIN_LEVELS = 10
+UPLOAD_DEFAULT_TITLE = "Custom Sounding"
+UPLOAD_PLOT_LEVELS = 150  # replace thinning with SounderPy's own argument once that's released
+UPLOAD_LIMITS_PER_IP = ((60, 5), (3600, 30))  # (seconds, requests)
+UPLOAD_LIMIT_TOTAL = (3600, 120)
+UPLOAD_MAX_PENDING = 2  # plots waiting or drawing, so uploads can't crowd out the other data sources
+UPLOAD_PENDING = threading.BoundedSemaphore(UPLOAD_MAX_PENDING)
+UPLOAD_HITS_LOCK = threading.Lock()
+UPLOAD_HITS = defaultdict(deque)
+
+# Letters and numbers in any language plus basic punctuation. Leaving out $ and \ also keeps
+# Matplotlib from reading a label as math, and < > & keep it inert if it's ever shown as HTML.
+UPLOAD_TEXT = re.compile(r"[\w .,:;'()/#+|\-]*")
+
+# name: (lowest, highest), matching the columns of a SHARPpy file.
+UPLOAD_COLUMNS = {
+    "pressure": (1.0, 1100.0),  # hPa
+    "height": (-500.0, 60000.0),  # m
+    "temperature": (-120.0, 70.0),  # C
+    "dewpoint": (-150.0, 70.0),  # C
+    "wind direction": (0.0, 360.0),  # degrees
+    "wind speed": (0.0, 300.0),  # kt
+}
+
+
+# name: (lowest, highest), matching the columns of a CM1 input_sounding file.
+UPLOAD_CM1_COLUMNS = {
+    "height": (0.0, 60000.0),  # m above ground
+    "potential temperature": (150.0, 5000.0),  # K
+    "mixing ratio": (0.0, 100.0),  # g/kg
+    "u wind": (-200.0, 200.0),  # m/s
+    "v wind": (-200.0, 200.0),  # m/s
+}
+
+
+# The map inset loads satellite tiles at a fixed detail, so zoom and latitude set how many, and a plot
+# peaks at about 0.5 GB plus 4.7 MB per tile. Measured with SounderPy 3.2.0: zoom 2 is 1.5 GB at 35N, zoom 3
+# is 2.5 GB at 35N, and zoom 5 is 10 GB at 60N, so zoom 3 and 4 can run a 2 GB droplet out of memory until
+# SounderPy's lighter tile loading arrives. The tile limit allows zoom 4 up to about 50N; past it the map zooms in.
+MAX_MAP_ZOOM = 4
+MAX_MAP_TILES = 1100
+
 
 # -----------------------------------------------------------------------------
 # REQUEST MODELS
@@ -109,7 +163,7 @@ class Settings(BaseModel):
     storm_motion: Union[str, list[float]] = "right_moving"
     modify_sfc: Optional[dict[str, float]] = None
     ecape: bool = False
-    map_zoom: int = 0
+    map_zoom: int = Field(default=0, ge=0, le=MAX_MAP_ZOOM)
     radar: Optional[Literal["single-site", "mosaic"]] = None
     radar_time: Optional[dt.datetime] = None  # UTC; defaults to sounding time
     hodo_boundary_angle: Optional[float] = None
@@ -151,6 +205,63 @@ class CompositeSettings(BaseModel):
 class CompositeRequest(BaseModel):
     profiles: list[SoundingRequest]
     settings: CompositeSettings = Field(default_factory=CompositeSettings)
+
+
+class UploadSfc(BaseModel, extra="forbid"):
+    T: Optional[Annotated[FiniteFloat, Field(ge=-120, le=70)]] = None
+    Td: Optional[Annotated[FiniteFloat, Field(ge=-150, le=70)]] = None
+    ws: Optional[Annotated[FiniteFloat, Field(ge=0, le=300)]] = None
+    wd: Optional[Annotated[FiniteFloat, Field(ge=0, le=360)]] = None
+
+
+class UploadSettings(BaseModel):
+    """The figure settings an upload may use."""
+    color_blind: bool = True
+    dark_mode: bool = False
+    hodo: bool = False
+    sr_hodo: bool = False
+    storm_motion: Union[Literal["right_moving", "left_moving", "mean_wind"], Annotated[list[Annotated[FiniteFloat, Field(ge=0, le=360)]], Field(min_length=2, max_length=2)]] = "right_moving"
+    modify_sfc: Optional[UploadSfc] = None
+    ecape: bool = False
+    map_zoom: int = Field(default=0, ge=0, le=MAX_MAP_ZOOM)
+    radar: Optional[Literal["single-site", "mosaic"]] = None
+    radar_time: Optional[dt.datetime] = None  # UTC; defaults to the sounding's date and time
+    hodo_boundary_angle: Optional[Annotated[FiniteFloat, Field(ge=0, le=360)]] = None
+
+
+class UploadCm1(BaseModel):
+    surface_pressure: Annotated[FiniteFloat, Field(ge=300, le=1100)]  # hPa
+    surface_theta: Annotated[FiniteFloat, Field(ge=150, le=500)]  # K
+    surface_qv: Annotated[FiniteFloat, Field(ge=0, le=100)]  # g/kg
+    rows: list[tuple[FiniteFloat, FiniteFloat, FiniteFloat, FiniteFloat, FiniteFloat]] = Field(max_length=UPLOAD_CM1_MAX_LEVELS)
+    elevation: Optional[Annotated[FiniteFloat, Field(ge=-500, le=9000)]] = None  # m; CM1 files don't say
+
+
+class UploadRequest(BaseModel):
+    title: str = Field(default="", max_length=50)
+    location: str = Field(default="", max_length=30)
+    right_title: str = Field(default="", max_length=30)
+    date: dt.date
+    time: dt.time
+    lat: Annotated[FiniteFloat, Field(ge=-90, le=90)]  # temperature advection and the map need these
+    lon: Annotated[FiniteFloat, Field(ge=-180, le=180)]
+    rows: Optional[list[tuple[FiniteFloat, FiniteFloat, FiniteFloat, FiniteFloat, FiniteFloat, FiniteFloat]]] = Field(default=None, max_length=UPLOAD_MAX_LEVELS)
+    cm1: Optional[UploadCm1] = None
+    settings: UploadSettings = Field(default_factory=UploadSettings)
+
+    @field_validator("title", "location", "right_title")
+    @classmethod
+    def plain_text(cls, value):
+        value = value.strip()
+        if not UPLOAD_TEXT.fullmatch(value):
+            raise ValueError("unsupported characters")
+        return value
+
+    @model_validator(mode="after")
+    def one_sounding(self):
+        if (self.rows is None) == (self.cm1 is None):
+            raise ValueError("send one sounding")
+        return self
 
 
 # -----------------------------------------------------------------------------
@@ -419,6 +530,19 @@ def _fetch_data(req, use_cache=True):
     return result
 
 
+def _map_tiles(lat, zoom):
+    """How many level-10 satellite tiles SounderPy's map inset covers (see plot.py's set_extent)."""
+    def row(degrees):  # Web Mercator
+        return (1 - math.asinh(math.tan(math.radians(max(min(degrees, 85), -85)))) / math.pi) / 2 * 1024
+    return (int(2 * zoom / 360 * 1024) + 2) * (int(row(lat - zoom / 1.6) - row(lat + zoom * 1.6)) + 2)
+
+
+def _safe_map_zoom(lat, zoom):
+    while zoom > 0 and _map_tiles(lat, zoom) > MAX_MAP_TILES:
+        zoom -= 1
+    return zoom
+
+
 def _render_png(clean_data, s):
     """Render a sounding or hodograph and return the PNG bytes."""
     storm_motion = s.storm_motion
@@ -431,7 +555,7 @@ def _render_png(clean_data, s):
         modify_sfc=s.modify_sfc or False,
         radar=s.radar,
         radar_time=s.radar_time.replace(tzinfo=None) if s.radar_time else "sounding",
-        map_zoom=s.map_zoom,
+        map_zoom=_safe_map_zoom(float(clean_data["site_info"]["site-latlon"][0]), s.map_zoom),
         hodo_boundary=(
             {"angle": [s.hodo_boundary_angle], "color": ["brown"]}
             if s.hodo_boundary_angle is not None
@@ -511,6 +635,233 @@ def _export_file(clean_data, file_type):
         output = Path(tmpdir) / f"sounderpy_data{suffix}"
         spy.to_file(file_type, clean_data, filename=str(output))
         return output.read_bytes(), output.name, content_type
+
+
+def _check_upload_rate(ip):
+    """Raise 429 past a limit. Failed attempts count too. Lives in memory, which suits the single worker."""
+    now = time.time()
+    window, total = UPLOAD_LIMIT_TOTAL
+    longest = max(seconds for seconds, _ in UPLOAD_LIMITS_PER_IP)
+
+    def retry(hits, seconds):
+        wait = int(seconds - (now - next(h for h in hits if now - h < seconds))) + 1
+        minutes = max(1, round(wait / 60))
+        raise HTTPException(
+            429,
+            f"That's a lot of uploads in a short time. Please try again in about {minutes} minute{'' if minutes == 1 else 's'}.",
+            headers={"Retry-After": str(wait)},
+        )
+
+    with UPLOAD_HITS_LOCK:
+        for key in list(UPLOAD_HITS):
+            hits = UPLOAD_HITS[key]
+            while hits and now - hits[0] >= (window if key is None else longest):
+                hits.popleft()
+            if not hits:
+                del UPLOAD_HITS[key]
+
+        everyone, mine = UPLOAD_HITS[None], UPLOAD_HITS[ip]
+        for seconds, limit in UPLOAD_LIMITS_PER_IP:
+            if sum(now - h < seconds for h in mine) >= limit:
+                retry(mine, seconds)
+        if len(everyone) >= total:
+            retry(everyone, window)
+        mine.append(now)
+        everyone.append(now)
+
+
+async def _read_upload_body(request):
+    """Read at most the size limit, whatever Content-Length claims."""
+    too_large = HTTPException(413, "That sounding is too large. The limit is 1 MB.")
+    try:
+        if int(request.headers.get("content-length", 0)) > UPLOAD_MAX_BODY_BYTES:
+            raise too_large
+    except ValueError:
+        raise HTTPException(400, "Bad request.")
+
+    body = bytearray()
+    async for chunk in request.stream():
+        body += chunk
+        if len(body) > UPLOAD_MAX_BODY_BYTES:
+            raise too_large
+    return bytes(body)
+
+
+def _upload_problem(exc):
+    """A validation failure as a sentence. Never echoes what was sent."""
+    error = exc.errors()[0]
+    if error["type"] == "json_invalid":
+        return "The sounding couldn't be read. Choose the file again."
+    field = str(error["loc"][0]) if error["loc"] else ""
+    return {
+        "title": "Keep the main title to 50 characters, using letters, numbers and basic punctuation.",
+        "location": "Keep the location name to 30 characters, using letters, numbers and basic punctuation.",
+        "right_title": "The filename can't be used as a title. Untick that box and try again.",
+        "date": "Enter a valid date.",
+        "time": "Enter a valid UTC time.",
+        "lat": "Latitude must be between -90 and 90.",
+        "lon": "Longitude must be between -180 and 180.",
+        "rows": f"The sounding must have at most {UPLOAD_MAX_LEVELS:,} levels of six finite numbers.",
+        "cm1": f"This CM1 sounding has a value that can't be right, or more than {UPLOAD_CM1_MAX_LEVELS:,} levels. Check the file, and that any surface elevation is in meters.",
+        "settings": "One of the figure settings isn't valid for an uploaded sounding.",
+    }.get(field, "The sounding couldn't be read. Choose the file again.")
+
+
+def _check_columns(rows, columns):
+    """Refuse values outside each column's range. Written so that NaN fails too."""
+    for column, (name, (low, high)) in enumerate(columns.items()):
+        bad = np.flatnonzero(~((rows[:, column] >= low) & (rows[:, column] <= high)))
+        if bad.size:
+            raise HTTPException(422, f"Level {bad[0] + 1} has an impossible {name}. Check the file's columns and units.")
+
+
+def _cm1_rows(cm1):
+    """A CM1 sounding as SHARPpy-style rows (p, z, T, Td, wd, ws), converted by SounderPy's own reader.
+
+    The reader only takes a path, so the checked numbers are written out for it; the temporary
+    file holds nothing but those numbers and is gone straight after.
+    """
+    rows = np.array(cm1.rows, dtype=float).reshape(-1, 5)
+    _check_columns(rows, UPLOAD_CM1_COLUMNS)
+    if len(rows) < UPLOAD_MIN_LEVELS + 2:  # the reader leaves off the top two levels
+        raise HTTPException(422, f"The sounding needs at least {UPLOAD_MIN_LEVELS + 2} levels; this one has {len(rows)}.")
+    if np.any(np.diff(rows[:, 0]) <= 0):
+        raise HTTPException(422, "The heights in this CM1 file must rise from each level to the next.")
+
+    with TemporaryDirectory(prefix="sounderpy_cm1_") as tmpdir:
+        path = Path(tmpdir) / "input_sounding"
+        with open(path, "w") as f:
+            f.write(f"{cm1.surface_pressure:.6f} {cm1.surface_theta:.6f} {cm1.surface_qv:.6f}\n")
+            np.savetxt(f, rows, fmt="%.6f")
+        data = spy.make_cm1_profile(str(path), {
+            "elev": cm1.elevation, "latlon": [0.0, 0.0], "top_title": "", "left_title": "", "right_title": "",
+        })
+
+    # Bone-dry levels have no real dewpoint. The reader marks those -80 C, which can be warmer
+    # than the air itself way up high, so keep them below the temperature there.
+    T = data["T"].m.astype(float)
+    Td = data["Td"].m.astype(float)
+    dry = ~(Td >= -150) | (Td == -80)
+    Td[dry] = np.minimum(-80.0, T[dry] - 10)
+    return np.c_[
+        data["p"].m, data["z"].m, T, Td,
+        mpcalc.wind_direction(data["u"], data["v"]).m, mpcalc.wind_speed(data["u"], data["v"]).m,
+    ].astype(float)
+
+
+def _check_upload_levels(req, rows):
+    """Returns the rows as an array, keeping each level that's higher than every one before it.
+
+    Sonde pressures repeat and jitter, and a file can run on into the descent, so those levels are
+    dropped. Values that can't be real are refused instead, since they mean a bad file.
+    """
+    today = dt.datetime.now(dt.timezone.utc).date()
+    if not dt.date(1900, 1, 1) <= req.date <= today + dt.timedelta(days=1):
+        raise HTTPException(422, "Enter a date from 1900 up to today.")
+
+    rows = np.array(rows, dtype=float).reshape(-1, 6)
+    _check_columns(rows, UPLOAD_COLUMNS)
+
+    bad = np.flatnonzero(rows[:, 3] > rows[:, 2] + 0.5)
+    if bad.size:
+        raise HTTPException(422, f"Level {bad[0] + 1} has a dewpoint above its temperature. Check the file's columns.")
+
+    keep, lowest_p, highest_z = [], np.inf, -np.inf
+    for i, (p, z) in enumerate(rows[:, :2]):
+        if p < lowest_p and z > highest_z:
+            keep.append(i)
+            lowest_p, highest_z = p, z
+    if len(keep) < UPLOAD_MIN_LEVELS:
+        raise HTTPException(422, f"The sounding needs at least {UPLOAD_MIN_LEVELS} levels that rise with height; this one has {len(keep)}.")
+    return rows[keep]
+
+
+def _thin_levels(rows):
+    """At most UPLOAD_PLOT_LEVELS evenly spaced levels, always keeping the surface and the top."""
+    if len(rows) <= UPLOAD_PLOT_LEVELS:
+        return rows
+    return rows[np.linspace(0, len(rows) - 1, UPLOAD_PLOT_LEVELS).round().astype(int)]
+
+
+def _upload_label(req):
+    return req.title or UPLOAD_DEFAULT_TITLE
+
+
+def _upload_clean_data(req, rows):
+    """The dict SounderPy plots, labelled so a plot can't pass as official data."""
+    p, z, T, Td, wd, ws = rows.T
+    u, v = mpcalc.wind_components(ws * units.kts, wd * units.degrees)
+    place = " | ".join(filter(None, [req.location, f"{req.lat:.2f}, {req.lon:.2f}"]))
+    return {
+        "p": p * units.hPa,
+        "z": z * units.m,
+        "T": T * units.degC,
+        "Td": Td * units.degC,
+        "u": u,
+        "v": v,
+        "site_info": {
+            "site-id": _upload_label(req),
+            "site-name": _upload_label(req),
+            "site-lctn": req.location,
+            "site-latlon": [req.lat, req.lon],
+            "site-elv": float(z[0]),
+            "source": "USER-SUPPLIED PROFILE",
+            "model": "no-model",
+            "fcst-hour": "no-fcst-hour",
+            "run-time": ["none", "none", "none", "none"],
+            "valid-time": [f"{req.date:%Y}", f"{req.date:%m}", f"{req.date:%d}", f"{req.time:%H%M}"],
+        },
+        "titles": {
+            "top_title": _upload_label(req),
+            "left_title": f"VALID: {req.date:%m-%d-%Y} {req.time:%H%M}Z | {place}",
+            "right_title": f"{req.right_title or UPLOAD_DEFAULT_TITLE}    ",
+        },
+    }
+
+
+def _plot_upload(req):
+    if not UPLOAD_PENDING.acquire(blocking=False):
+        raise HTTPException(503, "The server is busy with other uploads. Please try again in a moment.", headers={"Retry-After": "30"})
+
+    started = time.time()
+    try:
+        received = len(req.cm1.rows) if req.cm1 else len(req.rows)
+        try:
+            source = _cm1_rows(req.cm1) if req.cm1 else req.rows
+        except HTTPException:
+            raise
+        except (Exception, SystemExit) as exc:  # SounderPy's reader; logged without the data, as below
+            LOGGER.error("CM1 upload of %d levels failed to convert: %s", received, type(exc).__name__)
+            raise HTTPException(422, "This CM1 sounding couldn't be converted. Check the file's columns and units.")
+        checked = _check_upload_levels(req, source)
+        rows = _thin_levels(checked)
+        s = req.settings
+        settings = Settings(
+            **s.model_dump(exclude={"modify_sfc", "map_zoom", "storm_motion"}),
+            storm_motion=s.storm_motion,
+            modify_sfc=s.modify_sfc.model_dump(exclude_none=True) or None if s.modify_sfc else None,
+            map_zoom=s.map_zoom or (2 if s.radar else 0),  # radar is drawn on the map
+        )
+        try:
+            png = _render_png(_upload_clean_data(req, rows), settings)
+        # Logged without the traceback's locals or any of the data: it may be unpublished.
+        except (Exception, SystemExit) as exc:
+            LOGGER.error("upload of %d levels failed to draw: %s", len(rows), type(exc).__name__)
+            raise HTTPException(
+                500,
+                "SounderPy couldn't draw this sounding. That can happen with a very short or incomplete profile; "
+                "try turning off ECAPE or surface edits, or check the file.",
+            )
+    finally:
+        UPLOAD_PENDING.release()
+
+    LOGGER.info("upload %s levels=%d/%d/%d served in %.1fs", "cm1" if req.cm1 else "sharppy", received, len(checked), len(rows), time.time() - started)
+    return {
+        "label": _upload_label(req),
+        "info": None,
+        "levels": {"received": received, "plotted": len(rows)},
+        "image": "data:image/png;base64," + base64.b64encode(png).decode("ascii"),
+    }
 
 
 def _fetch_latest_runs():
@@ -670,6 +1021,21 @@ def sounding(req: SoundingRequest):
         "info": _sounding_info(clean_data, req.source),
         "image": "data:image/png;base64," + base64.b64encode(png).decode("ascii"),
     }
+
+
+@app.post("/api/upload-sounding")
+async def upload_sounding(request: Request):
+    """Plot a sounding the browser read from a user's file. Returns JSON ({label, image}). Stores nothing."""
+    if not UPLOADS_ENABLED:
+        raise HTTPException(503, "Uploaded soundings are turned off right now.")
+    _check_upload_rate(request.client.host if request.client else "unknown")
+
+    body = await _read_upload_body(request)
+    try:
+        req = UploadRequest.model_validate_json(body)
+    except ValidationError as exc:
+        raise HTTPException(422, _upload_problem(exc))
+    return await run_in_threadpool(_plot_upload, req)
 
 
 def _fetch_profiles(profiles, use_cache=True):

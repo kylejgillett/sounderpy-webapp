@@ -1,5 +1,8 @@
 # /etc/caddy/Caddyfile — Caddy fetches and renews the HTTPS certificate automatically.
 api.sounderpy.app {
 	encode gzip
+	request_body {
+		max_size 2MB
+	}
 	reverse_proxy 127.0.0.1:8000
 }

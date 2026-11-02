@@ -31,7 +31,7 @@
       </fieldset>
       <fieldset>
         <legend>Map &amp; radar</legend>
-        <label>Map zoom (0 hides the map)<input name="map_zoom" type="number" min="0" value="0" /></label>
+        <label>Map zoom (0 hides the map, up to 4)<input name="map_zoom" type="number" min="0" max="4" value="0" /></label>
         <label>Radar Source (NEXRAD site or MRMS)<select name="radar"><option value="">None</option><option value="single-site">NEXRAD site (nearest radar)</option><option value="mosaic">MRMS mosaic</option></select></label>
         <label>Radar time (UTC)<input name="radar_time" type="datetime-local" title="Leave blank to use the sounding time" /></label>
       </fieldset>
