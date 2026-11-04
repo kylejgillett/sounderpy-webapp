@@ -42,6 +42,11 @@ from pydantic import BaseModel, Field, FiniteFloat, ValidationError, field_valid
 
 from launches import get_launches, recent_launches
 
+try:
+    from sounderpy.data import ncep_bufr  # SounderPy 3.3+: RRFS falls back to NCEP's own soundings on NOMADS
+except ImportError:
+    ncep_bufr = None
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -912,6 +917,27 @@ def _plot_upload(req):
     }
 
 
+LATEST_RUN_STATION_NUM = 253  # KMOP's NCEP station number (NUM in SounderPy's BUFKIT station list)
+
+
+def _newer_nomads_rrfs(psu_run):
+    """The newest RRFS run on NOMADS that's newer than Penn State's, or None. Checks file headers only."""
+    if ncep_bufr is None:
+        return None
+    run = ncep_bufr.latest_expected_rrfs_run()
+    for _ in range(8):  # NOMADS keeps about two days
+        if psu_run is not None and run <= psu_run:
+            return None
+        try:
+            if requests.head(ncep_bufr.nomads_rrfs_url(LATEST_RUN_STATION_NUM, run), timeout=10).ok:
+                return run
+        except requests.RequestException:
+            LOGGER.warning("NOMADS RRFS check failed for %s", run)
+            return None
+        run -= dt.timedelta(hours=ncep_bufr.RRFS_SOUNDING_CYCLES)
+    return None
+
+
 def _fetch_latest_runs():
     runs = []
     station = "KMOP"
@@ -933,14 +959,18 @@ def _fetch_latest_runs():
 
             run_line = lines[4]
             start = run_line.index("TIME") + 7
-            run_time = run_line[start:start + 11]
-            latest = f"{run_time[2:4]}/{run_time[4:6]} {run_time[7:9]}Z"
+            run_time = run_line[start:start + 11]  # YYMMDD/HHMM
+            latest = dt.datetime(2000 + int(run_time[0:2]), int(run_time[2:4]), int(run_time[4:6]), int(run_time[7:9]))
 
         except Exception:
             LOGGER.exception("Unable to determine latest %s BUFKIT run", model)
             latest = None
 
-        runs.append({"model": model, "latest_run": latest})
+        # SounderPy uses NOMADS's RRFS run when Penn State's is older, so the label should say so too.
+        if model == "rrfs":
+            latest = _newer_nomads_rrfs(latest) or latest
+
+        runs.append({"model": model, "latest_run": f"{latest:%m/%d %H}Z" if latest else None})
 
     return runs
 
