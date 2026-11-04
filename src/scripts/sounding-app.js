@@ -15,6 +15,7 @@ const result = $(".spy-result");
 const settingsEl = $("#settings");
 const isMobile = window.matchMedia?.("(pointer: coarse)").matches ?? false; // phones and tablets get the app-like extras
 let lastRequest = null;
+let srHodoSounding = false; // whether the server can draw full soundings storm relative (from /api/health)
 let lastShareUrl = null; // address of the sounding on screen, with the settings it was made with
 let lastPlotFile = null; // the plot on screen as a file, ready for the phone's share sheet
 
@@ -110,6 +111,15 @@ function buildRequest(form) {
       if (v !== "") req[k] = k === "fcst_hr" ? Number(v) : k === "hour" ? parseHour(v) : v;
     }
   }
+  if (req.source === "bufkit") {
+    const model = req.model.toUpperCase(), hasRun = Boolean(req.date && req.hour);
+    if (ARCHIVE_ONLY.includes(req.model) && !hasRun) {
+      throw new Error(`The ${model} has been replaced by the RRFS, so only its past runs are available. Enter a run date and hour, or choose the RRFS for the latest forecast.`);
+    }
+    if (LATEST_ONLY.includes(req.model) && hasRun) {
+      throw new Error(`The ${model} isn't archived, so only its latest run is available. Leave the run date and hour blank.`);
+    }
+  }
   return req;
 }
 
@@ -156,7 +166,7 @@ function settingsSummary(s) {
     !s.color_blind && "Standard colors (color-blind mode off)",
     s.ecape && "ECAPE parcel path",
     s.hodo && "Hodograph only",
-    s.sr_hodo && (s.hodo ? "Storm-relative hodograph" : "Storm-relative (hodograph-only plots)"),
+    s.sr_hodo && (s.hodo || srHodoSounding ? "Storm-relative hodograph" : "Storm-relative (hodograph-only plots)"),
     s.hodo_boundary_angle != null && `Boundary axis at ${s.hodo_boundary_angle}°`,
     s.map_zoom !== 0 && `Map zoom ${s.map_zoom}`,
     s.radar && `Radar: ${{ "single-site": "NEXRAD site", mosaic: "MRMS mosaic" }[s.radar]}${s.radar_time ? ` at ${s.radar_time.replace("T", " ")} UTC` : ""}`,
@@ -647,8 +657,8 @@ for (const name of ["airport", "hour"]) {
 // "Customize figure": show how many settings differ from the defaults, and allow a reset.
 const settingsForm = $(".spy-settings-form");
 function updateSettingsCount() {
-  // build_sounding has no sr_hodo yet, so say when the option won't apply.
-  $("[data-sr-note]").hidden = !(settingsForm.elements.namedItem("sr_hodo").checked && !settingsForm.elements.namedItem("hodo").checked);
+  // On a server whose SounderPy has no sr_hodo for full soundings, say when the option won't apply.
+  $("[data-sr-note]").hidden = srHodoSounding || !(settingsForm.elements.namedItem("sr_hodo").checked && !settingsForm.elements.namedItem("hodo").checked);
   const n = settingsSummary(readSettings()).length;
   for (const badge of $$(".spy-settings-count")) {
     badge.textContent = `${n} change${n === 1 ? "" : "s"}`;
@@ -808,7 +818,11 @@ function lineControls(style) {
 // The /api/composite request; names match SounderPy's build_composite arguments.
 function compositeRequest() {
   const options = $(".spy-composite-options");
-  const cmap = options.querySelector('[name="cmap"]').value;
+  const field = (name) => options.querySelector(`[name="${name}"]`);
+  const cmap = field("cmap").value;
+  const smDir = num(field("sm_dir").value), smSpd = num(field("sm_spd").value);
+  if ((smDir === null) !== (smSpd === null)) throw new Error("Enter both a custom storm direction and speed, or leave both blank.");
+  const style = field("style").value;
   return {
     source: "composite",
     profiles: profiles.map(({ style, ...request }) => request),
@@ -819,6 +833,10 @@ function compositeRequest() {
       ls_to_use: profiles.map((p) => p.style.ls),
       lw_to_use: profiles.map((p) => p.style.lw),
       alphas_to_use: profiles.map((p) => p.style.alpha),
+      style,
+      sr_hodo: style !== "sounding" && field("sr_hodo").checked,
+      show_params: field("show_params").checked,
+      storm_motion: smDir !== null ? [smDir, smSpd] : field("storm_motion").value,
     },
   };
 }
@@ -828,6 +846,7 @@ function renderProfiles() {
   $(".spy-profile-count").textContent = `${profiles.length} of ${MAX_PROFILES}`;
   $(".spy-profile-empty").hidden = profiles.length > 0;
   $("[data-add-profile]").disabled = full;
+  $("[data-clear-profiles]").hidden = profiles.length === 0;
   $("[data-build-composite]").disabled = profiles.length < MIN_PROFILES;
   $('[data-tab="composite"]').textContent = profiles.length ? `Composite soundings (${profiles.length})` : "Composite soundings";
   updateTabsToggle();
@@ -876,7 +895,9 @@ $("[data-use-in-composite]").addEventListener("click", () => {
 
 // ---- Forecast timeseries: many forecast hours of one BUFKIT site and run ----------
 
-const FORECAST_LIMITS = { gfs: 180, hrrr: 48, rap: 51, nam: 84, namnest: 60, sref: 84, hiresw: 48 }; // from SounderPy
+const FORECAST_LIMITS = { gfs: 180, hrrr: 48, rap: 51, rrfs: 84, nam: 48, namnest: 60, sref: 84, hiresw: 48 }; // from SounderPy
+const ARCHIVE_ONLY = ["nam", "namnest"]; // replaced by the RRFS: past runs only
+const LATEST_ONLY = ["sref", "hiresw"]; // not archived
 const seriesDialog = $(".spy-series");
 const seriesField = (name) => $(`.spy-series [name="${name}"]`);
 const seriesMode = () => $('.spy-series [name="series_mode"]:checked').value;
@@ -947,6 +968,11 @@ $("[data-create-series]").addEventListener("click", () => {
 });
 
 $("[data-add-profile]").addEventListener("click", () => openProfileDialog());
+$("[data-clear-profiles]").addEventListener("click", () => {
+  if (!window.confirm(`Remove all ${profiles.length} profiles from this composite?`)) return;
+  profiles.length = 0;
+  renderProfiles();
+});
 $("[data-close-profile]").addEventListener("click", () => profileDialog.close());
 profileDialog.addEventListener("click", (e) => { if (e.target === profileDialog) profileDialog.close(); }); // backdrop
 profileDialog.addEventListener("close", () => { borrowedSource = borrowedForm?.dataset.source ?? borrowedSource; returnForm(); });
@@ -954,7 +980,15 @@ $$("[data-profile-type]").forEach((b) => b.addEventListener("click", () => borro
 $('.spy-composite-options [name="cmap"]').addEventListener("change", (e) => {
   $(".spy-profile-list").classList.toggle("is-custom", e.target.value === "custom");
 });
-$("[data-build-composite]").addEventListener("click", () => runSounding(compositeRequest()));
+$("[data-build-composite]").addEventListener("click", () => {
+  let request;
+  try { request = compositeRequest(); } catch (err) { return showError(err, "Check your composite"); }
+  runSounding(request);
+});
+// A storm-relative hodograph needs a hodograph panel.
+$('.spy-composite-options [name="style"]').addEventListener("change", (e) => {
+  $('.spy-composite-options [name="sr_hodo"]').disabled = e.target.value === "sounding";
+});
 renderProfiles();
 
 // ---- Upload tab: read a sounding file here, then send its numbers ----------------------
@@ -1211,6 +1245,10 @@ async function checkHealth() {
     const info = await (await api("/api/health")).json();
     health.dataset.state = "online";
     text.textContent = `Server online · SounderPy v${info.sounderpy_version}`;
+    if (srHodoSounding !== Boolean(info.sr_hodo_sounding)) {
+      srHodoSounding = Boolean(info.sr_hodo_sounding);
+      updateSettingsCount();
+    }
     $(".spy-footer-version").textContent = ` v${info.sounderpy_version}`;
   } catch {
     health.dataset.state = "offline";

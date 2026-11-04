@@ -18,15 +18,26 @@ const schemes = ["Viridis", "Plasma", "Cividis", "Turbo", "Coolwarm"];
     </div>
     <p class="spy-profile-empty">No profiles yet. Add at least two to compare them on one plot.</p>
     <ol class="spy-profile-list"></ol>
-    <button class="spy-secondary spy-profile-add" type="button" data-add-profile>+ Add profile</button>
+    <div class="spy-profile-buttons">
+      <button class="spy-secondary spy-profile-add" type="button" data-add-profile>+ Add profile</button>
+      <button class="spy-secondary" type="button" data-clear-profiles hidden>Clear all profiles</button>
+    </div>
   </div>
 
   <div class="spy-side">
     <p class="spy-hint">Overlay up to 6 soundings on one Skew-T and hodograph. Mix any data types, sites, and times.</p>
     <div class="spy-composite-options">
+      <label>Panels<select name="style"><option value="full">Skew-T and hodograph</option><option value="sounding">Skew-T only</option><option value="hodograph">Hodograph only</option></select></label>
+      <label>Line colors<select name="cmap">{schemes.map((s) => <option value={s.toLowerCase()}>{s}</option>)}<option value="custom">Custom (choose per profile)</option></select></label>
+      <label>Storm motion<select name="storm_motion"><option value="right_moving">Right mover</option><option value="left_moving">Left mover</option><option value="mean_wind">Mean wind</option></select></label>
+      <div class="spy-fields spy-composite-motion">
+        <label>Custom direction<input name="sm_dir" type="number" min="0" max="360" step="any" placeholder="deg" /></label>
+        <label>Custom speed<input name="sm_spd" type="number" min="0" max="360" step="any" placeholder="kts" /></label>
+      </div>
       <label class="spy-check"><input type="checkbox" name="dark_mode" checked />Dark mode</label>
       <label class="spy-check"><input type="checkbox" name="shade_between" checked />Shade between temperature and dewpoint</label>
-      <label>Line colors<select name="cmap">{schemes.map((s) => <option value={s.toLowerCase()}>{s}</option>)}<option value="custom">Custom (choose per profile)</option></select></label>
+      <label class="spy-check"><input type="checkbox" name="sr_hodo" />Storm-relative hodograph</label>
+      <label class="spy-check"><input type="checkbox" name="show_params" checked />Parameter table <small>(off is faster)</small></label>
     </div>
     <div class="spy-actions">
       <button class="spy-submit" type="button" data-build-composite disabled><span>Build composite</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m0 0-5-5m5 5-5 5" /></svg></button>

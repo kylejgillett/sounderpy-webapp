@@ -64,6 +64,11 @@
 .spy .is-custom .spy-profile-style .spy-profile-color { display: flex; }
 .spy-profile-add { align-self: flex-start; }
 .spy-composite-options { display: grid; gap: .8rem; }
+.spy-profile-buttons { display: flex; flex-wrap: wrap; gap: .6rem; }
+.spy .spy-composite-options .spy-composite-motion { grid-template-columns: 1fr 1fr; gap: .8rem; }
+.spy .spy-composite-options .spy-composite-motion > :first-child { grid-column: auto; }
+.spy-composite-options .spy-check small { color: var(--ink-soft); font-weight: 400; }
+.spy-composite-options .spy-check:has(input:disabled) { opacity: .5; }
 
 /* Add profile pop-up */
 .spy-profile-dialog, .spy-series, .spy-whats-new {

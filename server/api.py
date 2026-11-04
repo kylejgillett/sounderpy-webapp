@@ -6,6 +6,7 @@ Run from this folder with:
 """
 
 import base64
+import inspect
 import io
 import logging
 import math
@@ -75,7 +76,9 @@ EXPORTS = {
     "sharppy": (".txt", "text/plain"),
 }
 
-BUFKIT_MODELS = ["gfs", "nam", "namnest", "rap", "hrrr", "sref", "hiresw"]
+# Penn State serves the latest run of these; IEM archives past runs of the second list.
+BUFKIT_MODELS = ["gfs", "rrfs", "rap", "hrrr", "sref", "hiresw"]
+BUFKIT_ARCHIVE_MODELS = ["gfs", "rrfs", "rap", "hrrr", "nam", "namnest"]
 
 
 # -----------------------------------------------------------------------------
@@ -159,7 +162,7 @@ class Settings(BaseModel):
     color_blind: bool = True
     dark_mode: bool = False
     hodo: bool = False
-    sr_hodo: bool = False  # hodograph-only for now: build_sounding in SounderPy 3.2.0 has no sr_hodo
+    sr_hodo: bool = False  # full soundings only take it from SounderPy 3.3 (see SR_HODO_SOUNDING)
     storm_motion: Union[str, list[float]] = "right_moving"
     modify_sfc: Optional[dict[str, float]] = None
     ecape: bool = False
@@ -191,6 +194,13 @@ MAX_COMPOSITE_PROFILES = 6
 COMPOSITE_FETCH_WORKERS = 4  # fetched side by side; drawing still takes turns under PLOT_LOCK
 
 
+# A named storm motion, or [direction (degrees), speed (kt)].
+StormMotion = Union[
+    Literal["right_moving", "left_moving", "mean_wind"],
+    Annotated[list[Annotated[FiniteFloat, Field(ge=0, le=360)]], Field(min_length=2, max_length=2)],
+]
+
+
 class CompositeSettings(BaseModel):
     """Names match SounderPy's build_composite. The style lists hold one entry per profile."""
     dark_mode: bool = True
@@ -200,6 +210,11 @@ class CompositeSettings(BaseModel):
     ls_to_use: Optional[list[Literal["-", "--", ":", "-."]]] = None
     lw_to_use: Optional[list[float]] = None
     alphas_to_use: Optional[list[float]] = None
+    # Newer SounderPy only (3.3+): which panels, a storm-relative hodograph, the parameter table, and the storm motion.
+    style: Literal["full", "sounding", "hodograph"] = "full"
+    sr_hodo: bool = False
+    show_params: bool = True
+    storm_motion: StormMotion = "right_moving"
 
 
 class CompositeRequest(BaseModel):
@@ -220,7 +235,7 @@ class UploadSettings(BaseModel):
     dark_mode: bool = False
     hodo: bool = False
     sr_hodo: bool = False
-    storm_motion: Union[Literal["right_moving", "left_moving", "mean_wind"], Annotated[list[Annotated[FiniteFloat, Field(ge=0, le=360)]], Field(min_length=2, max_length=2)]] = "right_moving"
+    storm_motion: StormMotion = "right_moving"
     modify_sfc: Optional[UploadSfc] = None
     ecape: bool = False
     map_zoom: int = Field(default=0, ge=0, le=MAX_MAP_ZOOM)
@@ -407,13 +422,13 @@ def _friendly_error(req, exc):
 
     if req.source == "bufkit":
         site, model = req.site.strip().upper(), req.model.upper()
-        if "valid bufkit site" in lower:
+        if "valid bufkit site" in lower or "doesn't seem to exist" in lower:  # 3.2.0 and 3.3 wording
             return f"“{site}” isn't a BUFKIT site. Click a station on the map to pick one."
         if "invalid forecast hour" in lower:
             limit = re.search(r"up to F0*(\d+)", text)
             return f"Forecast hour {req.fcst_hr} is beyond the {model}'s range" + (f" (up to F{int(limit.group(1)):02d})." if limit else ".")
         if "not a valid model" in lower:
-            return f"The {model} isn't available for past runs. Try the GFS, NAM, NAMNEST, RAP, or HRRR, or leave the run blank for the latest."
+            return f"The {model} isn't available for past runs. Try the GFS, RRFS, RAP, HRRR, NAM, or NAMNEST, or leave the run blank for the latest."
         run = f"the {when} run" if when else "the latest run"
         return (f"No {model} forecast for {site} at F{int(req.fcst_hr):02d} from {run}. Try another forecast hour, model, "
                 "or run; past runs are only archived for some models and dates.")
@@ -449,6 +464,14 @@ def _load_data(req):
         run = ()
         if req.date and req.hour not in (None, ""):
             run = (*_ymd(req.date), _hour(req.hour))
+        model = req.model.lower()
+        if model not in BUFKIT_MODELS + BUFKIT_ARCHIVE_MODELS:
+            raise HTTPException(422, f"“{req.model}” isn't a BUFKIT model. Choose one from the list.")
+        if not run and model not in BUFKIT_MODELS:
+            raise HTTPException(422, f"The {req.model.upper()} has been replaced by the RRFS, so only its past runs are available. "
+                                     "Enter a run date and hour, or choose the RRFS for the latest forecast.")
+        if run and model not in BUFKIT_ARCHIVE_MODELS:
+            raise HTTPException(422, f"The {req.model.upper()} isn't archived, so only its latest run is available. Leave the run date and hour blank.")
         clean_data = spy.get_bufkit_data(
             req.model.lower(), req.site.strip().lower(), int(req.fcst_hr), *run,
             hush=True,
@@ -543,6 +566,10 @@ def _safe_map_zoom(lat, zoom):
     return zoom
 
 
+# SounderPy 3.2.0's full sounding has no sr_hodo, so there it stays ground relative.
+SR_HODO_SOUNDING = "sr_hodo" in inspect.signature(spy.build_sounding).parameters
+
+
 def _render_png(clean_data, s):
     """Render a sounding or hodograph and return the PNG bytes."""
     storm_motion = s.storm_motion
@@ -552,7 +579,7 @@ def _render_png(clean_data, s):
     common = dict(
         dark_mode=s.dark_mode,
         storm_motion=storm_motion,
-        modify_sfc=s.modify_sfc or False,
+        modify_sfc=s.modify_sfc or None,  # None, not False: SounderPy 3.3 reads False as a dict
         radar=s.radar,
         radar_time=s.radar_time.replace(tzinfo=None) if s.radar_time else "sounding",
         map_zoom=_safe_map_zoom(float(clean_data["site_info"]["site-latlon"][0]), s.map_zoom),
@@ -577,6 +604,7 @@ def _render_png(clean_data, s):
                         color_blind=s.color_blind,
                         special_parcels=None if s.ecape else "simple",
                         filename=str(output),
+                        **({"sr_hodo": s.sr_hodo} if SR_HODO_SOUNDING else {}),
                         **common,
                     )
             finally:
@@ -585,8 +613,31 @@ def _render_png(clean_data, s):
         return output.read_bytes()
 
 
+# SounderPy 3.3 renamed the line-style lists and added options. Ask the installed version what it takes,
+# so this file works with either until the droplet is upgraded.
+COMPOSITE_ARGS = set(inspect.signature(spy.build_composite).parameters)
+NEW_COMPOSITE_OPTIONS = {"style": "full", "sr_hodo": False, "show_params": True, "storm_motion": "right_moving"}
+
+
+def _composite_kwargs(s):
+    """build_composite's arguments for these settings. Raises 422 for an option this SounderPy lacks."""
+    if "linestyles" in COMPOSITE_ARGS:
+        kwargs = dict(colors=s.colors_to_use, linestyles=s.ls_to_use, linewidths=s.lw_to_use, alphas=s.alphas_to_use)
+    else:
+        kwargs = dict(colors_to_use=s.colors_to_use or "none", ls_to_use=s.ls_to_use or "none",
+                      lw_to_use=s.lw_to_use or "none", alphas_to_use=s.alphas_to_use or "none")
+    for name, default in NEW_COMPOSITE_OPTIONS.items():
+        value = getattr(s, name)
+        if name in COMPOSITE_ARGS:
+            kwargs[name] = value
+        elif value != default:
+            raise HTTPException(422, "That composite option needs a newer SounderPy than this server has. Reset it and try again.")
+    return kwargs
+
+
 def _render_composite(data_list, s):
     """Render a composite of several profiles and return the PNG bytes."""
+    kwargs = _composite_kwargs(s)
     with TemporaryDirectory(prefix="sounderpy_composite_") as tmpdir:
         output = Path(tmpdir) / "composite.png"
 
@@ -596,13 +647,10 @@ def _render_composite(data_list, s):
                     data_list,
                     shade_between=s.shade_between,
                     cmap=s.cmap,
-                    colors_to_use=s.colors_to_use or "none",
-                    ls_to_use=s.ls_to_use or "none",
-                    lw_to_use=s.lw_to_use or "none",
-                    alphas_to_use=s.alphas_to_use or "none",
                     dark_mode=s.dark_mode,
                     save=True,
                     filename=str(output),
+                    **kwargs,
                 )
             finally:
                 plt.close("all")
@@ -914,7 +962,8 @@ app.add_middleware(
 
 @app.get("/api/health")
 def health():
-    return {"online": True, "sounderpy_version": SOUNDERPY_VERSION}
+    # `sr_hodo_sounding` tells the page whether full soundings can be storm relative.
+    return {"online": True, "sounderpy_version": SOUNDERPY_VERSION, "sr_hodo_sounding": SR_HODO_SOUNDING}
 
 
 @app.get("/api/bufkit/latest-runs")
@@ -1083,6 +1132,7 @@ def _settle_latest_runs(profiles, results):
 def composite(req: CompositeRequest):
     """Fetch every profile, then return one composite plot as JSON ({label, image})."""
     _check_composite(req)
+    _composite_kwargs(req.settings)  # an option this SounderPy lacks fails before any fetching
     started = time.time()
 
     results = _fetch_profiles(req.profiles)
@@ -1097,6 +1147,8 @@ def composite(req: CompositeRequest):
     drawing = time.time()
     try:
         png = _render_composite([data for data, _ in results], req.settings)
+    except HTTPException:
+        raise
     except (Exception, SystemExit):
         LOGGER.exception("Composite rendering failed for %s", req.model_dump())
         raise HTTPException(500, "The data loaded, but SounderPy couldn't draw this composite. Try removing a very short or incomplete profile.")

@@ -48,11 +48,11 @@ import FormActions from "./FormActions.astro";
 <form class="spy-panel" data-source="bufkit" hidden>
   <div class="spy-map" role="region" aria-label="BUFKIT station map"></div>
   <div class="spy-side">
-    <p class="spy-hint">Click a station on the map, or type its ID. Leave the run date and hour blank for the latest run.</p>
+    <p class="spy-hint">Click a station on the map, or type its ID. Leave the run date and hour blank for the latest run. The NAM and NAMNEST, now replaced by the RRFS, only have past runs.</p>
     <div class="spy-fields">
       <label>Site ID<input name="site" required placeholder="e.g. KMOP" autocomplete="off" /></label>
       <label>Model<select name="model" required>
-        {["gfs", "nam", "namnest", "rap", "hrrr", "sref", "hiresw"].map((m) => <option value={m} selected={m === "hrrr"}>{m.toUpperCase()}</option>)}
+        {["hrrr", "rrfs", "rap", "gfs", "sref", "hiresw", "nam", "namnest"].map((m) => <option value={m} selected={m === "hrrr"}>{m.toUpperCase()}{["nam", "namnest"].includes(m) ? " · past runs only" : ""}</option>)}
       </select></label>
       <label>Forecast hour<input name="fcst_hr" type="number" min="0" required value="1" placeholder="hours after run" /></label>
       <label>Run date (UTC)<input name="date" type="date" /></label>

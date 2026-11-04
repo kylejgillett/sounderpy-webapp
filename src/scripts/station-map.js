@@ -183,39 +183,42 @@ const CELL = 44;
 /**
  * Clickable station dots with faded ID labels, thinned out by zoom.
  * rows: [id, name, region, lat, lon, elev].
+ *
+ * Each station's dot and label are one HTML marker, so they glide together while the map zooms
+ * (canvas dots stretch mid-zoom and then snap back). Thinning waits until the map settles.
  */
 export function stationLayer(map, rows, { onPick, style = DOT, popup = true }) {
-  if (!map.getPane("station-labels")) {
-    const pane = map.createPane("station-labels");
+  if (!map.getPane("stations")) {
+    const pane = map.createPane("stations");
     pane.style.zIndex = 450;
-    pane.style.pointerEvents = "none";
+    pane.style.pointerEvents = "none"; // only the dots take clicks, not the labels or the gaps
   }
   const entries = new Map();
   let picked = null;
   let launched = new Map(), launchedOnly = false; // id -> { hour, when, fresh }
   const launchOf = (entry) => launched.get(entry.row[0].toUpperCase());
   const launchStyle = (launch) => (launch.fresh ? LAUNCHED : LAUNCHED_OLDER);
-  const restyle = (entry) => {
-    const launch = launchOf(entry);
-    entry.marker.setStyle(entry === picked ? { ...PICKED, radius: launch ? LAUNCHED.radius : PICKED.radius } : launch ? launchStyle(launch) : style);
-  };
-  const labelIcon = (id, hour) => L.divIcon({
-    className: "spy-station-label",
-    html: `<span class="${hour ? "has-launch" : ""}">${esc(id)}</span>${hour ? `<b>${esc(hour)}</b>` : ""}`,
+  // The dot's outer size matches what a circleMarker with this radius and outline drew.
+  const stationIcon = (id, s, hour) => L.divIcon({
+    className: "spy-station",
+    html: `<i style="--d:${2 * s.radius + s.weight}px;--w:${s.weight}px;--edge:${s.color};--fill:${s.fillColor};--o:${s.fillOpacity}"></i>`
+      + `<span class="${hour ? "has-launch" : ""}">${esc(id)}</span>${hour ? `<b>${esc(hour)}</b>` : ""}`,
     iconSize: null,
   });
+  const restyle = (entry) => {
+    const launch = launchOf(entry);
+    const s = entry === picked ? { ...PICKED, radius: launch ? LAUNCHED.radius : PICKED.radius } : launch ? launchStyle(launch) : style;
+    entry.marker.setIcon(stationIcon(entry.row[0], s, launch?.hour));
+    entry.marker.setZIndexOffset(entry === picked ? 1000 : launch ? 500 : 0);
+  };
 
   // Main sites (4-character IDs like KOAX) win when stations crowd the same spot.
   const ordered = [...rows].sort((a, b) => (b[0].length === 4) - (a[0].length === 4));
   for (const row of ordered) {
-    const marker = L.circleMarker([row[3], row[4]], style)
+    const marker = L.marker([row[3], row[4]], { pane: "stations", icon: stationIcon(row[0], style) })
       .bindTooltip(`${esc(row[0])} · ${esc(row[1])}`, { direction: "top", offset: [0, -4] })
       .on("click", () => { select(row[0]); onPick(row); });
-    const label = L.marker([row[3], row[4]], {
-      pane: "station-labels", interactive: false, keyboard: false,
-      icon: labelIcon(row[0]),
-    });
-    entries.set(row[0].toUpperCase(), { marker, label, row });
+    entries.set(row[0].toUpperCase(), { marker, row });
   }
 
   function update() {
@@ -236,14 +239,14 @@ export function stationLayer(map, rows, { onPick, style = DOT, popup = true }) {
     if (!launchedOnly) inView.filter((entry) => !isLaunched(entry)).forEach(claim);
     for (const entry of entries.values()) {
       const show = visible.has(entry);
-      for (const layer of [entry.marker, entry.label]) {
-        if (show && !map.hasLayer(layer)) layer.addTo(map);
-        else if (!show && map.hasLayer(layer)) layer.remove();
-      }
+      if (show && !map.hasLayer(entry.marker)) entry.marker.addTo(map);
+      else if (!show && map.hasLayer(entry.marker)) entry.marker.remove();
     }
-    picked?.marker.bringToFront();
   }
-  map.on("moveend zoomend", update);
+  // A scroll-wheel zoom is several small zooms in a row; thin out once, when the map comes to rest.
+  let settle = null;
+  map.on("movestart zoomstart", () => clearTimeout(settle));
+  map.on("moveend", () => { clearTimeout(settle); settle = setTimeout(update, 120); });
   update();
 
   function select(id, { pan = false } = {}) {
@@ -266,7 +269,6 @@ export function stationLayer(map, rows, { onPick, style = DOT, popup = true }) {
     entries.forEach((entry) => {
       const launch = launchOf(entry), [id, name] = entry.row;
       restyle(entry);
-      entry.label.setIcon(labelIcon(id, launch?.hour));
       entry.marker.setTooltipContent(`${esc(id)} · ${esc(name)}${launch ? `<br>Launch: ${esc(launch.when)}` : ""}`);
     });
     update();
@@ -332,6 +334,13 @@ export function pointPicker(map, { onPick }) {
  * opens straight away (or says nothing was found) instead of zooming to all results.
  */
 export function airportLayer(map, { onPick }) {
+  // Above the faint airport dots. SVG, unlike canvas, lets clicks through to the airports beneath.
+  if (!map.getPane("results")) {
+    const pane = map.createPane("results");
+    pane.style.zIndex = 460;
+    pane.style.pointerEvents = "none";
+  }
+  const renderer = L.svg({ pane: "results" });
   const layer = L.featureGroup().addTo(map);
   const count = (n) => `${n} profile${n === 1 ? "" : "s"}`;
   const popupAt = (focus, html) => L.popup({ className: "spy-popup" }).setLatLng([focus.lat, focus.lon]).setContent(html).openOn(map);
@@ -367,7 +376,7 @@ export function airportLayer(map, { onPick }) {
       }
       popup.append(buttons);
 
-      const marker = L.circleMarker([lat, lon], { ...DOT, radius: 5 + Math.min(list.length, 6), fillColor: COLORS.airport })
+      const marker = L.circleMarker([lat, lon], { ...DOT, radius: 5 + Math.min(list.length, 6), fillColor: COLORS.airport, pane: "results", renderer })
         .bindTooltip(`${esc(code)} · ${count(list.length)}`, { direction: "top" })
         .bindPopup(popup, { className: "spy-popup" })
         .addTo(layer);
