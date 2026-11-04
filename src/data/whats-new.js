@@ -3,12 +3,21 @@
 // The newest release's `version` shows in the site footer.
 // `notice` is optional: a highlighted heading and line for that release's biggest news.
 export const RELEASES = [
+  {
+    id: "2026-11-04",
+    version: "2026.11.04",
+    date: "November 4th, 2026",
+    notice: { heading: "This is the NEW SounderPy App!", text: "Update your bookmarks to sounderpy.app" },
+    items: [
+      "Support for RRFS forecasts: Rapid Refresh Forecast System model profiles are available through BUFKIT.",
+      "Update to v3.3.0 figures: a beta version of the coming full SounderPy release, with updated figures and figure settings, is deployed for the web app.",
+    ],
+  },
 
   {
     id: "2026-11-02",
-    version: "2026.10.30",
+    version: "2026.11.02",
     date: "November 2nd, 2026",
-    notice: { heading: "This is the NEW SounderPy App!", text: "Update your bookmarks to sounderpy.app" },
     items: [
       "Custom Soundings: capability to upload and plot custom SHARPpy (.txt, .sharppy) and CM1 input_sounding (.txt, .snd, or no extension), soundings. Max upload is 1 MB. Plots are fully customizable.",
       "Mobile: improved mobile experience.",
