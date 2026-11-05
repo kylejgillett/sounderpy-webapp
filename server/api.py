@@ -82,8 +82,19 @@ EXPORTS = {
 }
 
 # Penn State serves the latest run of these; IEM archives past runs of the second list.
-BUFKIT_MODELS = ["gfs", "rrfs", "rap", "hrrr", "sref", "hiresw"]
+BUFKIT_MODELS = ["gfs", "rrfs", "rap", "hrrr"]
 BUFKIT_ARCHIVE_MODELS = ["gfs", "rrfs", "rap", "hrrr", "nam", "namnest"]
+# Retired with the NAM on Nov 3, 2026 (NWS SCN 26-48), and never archived, so nothing is left of them.
+BUFKIT_RETIRED_MODELS = ["sref", "hiresw"]
+
+# Old IDs in SounderPy's station list that BUFKIT files no longer use. Each maps to the station's
+# current ID (same NCEP station number), so typed IDs and old share links still work.
+# Kept off the map by scripts/build-station-data.mjs.
+BUFKIT_RENAMED = {"KY26": "KMBG", "KBNG": "KBMG", "ISQ": "KISQ", "KFST": "KSTK", "K36U": "KHCR",
+                  "KWIN": "WNTR", "KBNY": "BNY", "K2IS": "2IS", "OSC": "OSCR"}
+# ...except Penn State's latest GFS files, which still use the old IDs for these two.
+BUFKIT_GFS_LATEST = {"BNY": "KBNY", "2IS": "K2IS"}
+BUFKIT_RETIRED = {"XLIK"}  # no data under any ID
 
 
 # -----------------------------------------------------------------------------
@@ -470,15 +481,22 @@ def _load_data(req):
         if req.date and req.hour not in (None, ""):
             run = (*_ymd(req.date), _hour(req.hour))
         model = req.model.lower()
+        if model in BUFKIT_RETIRED_MODELS:
+            raise HTTPException(422, f"The {req.model.upper()} was retired on Nov 3, 2026, when the RRFS replaced it, and its runs "
+                                     "weren't archived. Choose the RRFS instead.")
         if model not in BUFKIT_MODELS + BUFKIT_ARCHIVE_MODELS:
             raise HTTPException(422, f"“{req.model}” isn't a BUFKIT model. Choose one from the list.")
         if not run and model not in BUFKIT_MODELS:
             raise HTTPException(422, f"The {req.model.upper()} has been replaced by the RRFS, so only its past runs are available. "
                                      "Enter a run date and hour, or choose the RRFS for the latest forecast.")
-        if run and model not in BUFKIT_ARCHIVE_MODELS:
-            raise HTTPException(422, f"The {req.model.upper()} isn't archived, so only its latest run is available. Leave the run date and hour blank.")
+        site = req.site.strip().upper()
+        if site in BUFKIT_RETIRED:
+            raise HTTPException(422, f"“{site}” no longer has BUFKIT data. Click a station on the map to pick a nearby one.")
+        site = BUFKIT_RENAMED.get(site, site)
+        if model == "gfs" and not run:
+            site = BUFKIT_GFS_LATEST.get(site, site)
         clean_data = spy.get_bufkit_data(
-            req.model.lower(), req.site.strip().lower(), int(req.fcst_hr), *run,
+            req.model.lower(), site.lower(), int(req.fcst_hr), *run,
             hush=True,
         )
         return clean_data, _site_label(clean_data, "forecast for")

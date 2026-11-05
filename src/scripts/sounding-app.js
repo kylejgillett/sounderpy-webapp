@@ -116,9 +116,6 @@ function buildRequest(form) {
     if (ARCHIVE_ONLY.includes(req.model) && !hasRun) {
       throw new Error(`The ${model} has been replaced by the RRFS, so only its past runs are available. Enter a run date and hour, or choose the RRFS for the latest forecast.`);
     }
-    if (LATEST_ONLY.includes(req.model) && hasRun) {
-      throw new Error(`The ${model} isn't archived, so only its latest run is available. Leave the run date and hour blank.`);
-    }
   }
   return req;
 }
@@ -518,7 +515,7 @@ async function initMap(form) {
   const el = $(".spy-map", form);
 
   try {
-    const { createBaseMap, fetchData, stationLayer, launchControl, pointPicker, airportLayer, FAINT_DOT } = await import("./station-map.js");
+    const { createBaseMap, fetchData, stationLayer, launchControl, pointPicker, airportLayer, FAINT_DOT, BUFKIT_MODEL_CODES } = await import("./station-map.js");
     const map = maps[source].map = createBaseMap(el);
 
     if (source === "raob" || source === "bufkit") {
@@ -528,6 +525,15 @@ async function initMap(form) {
       layer.select(form.site.value);
       form.site.addEventListener("input", () => layer.select(form.site.value, { pan: true }));
       if (source === "raob") launches = trackLaunches(form, map, layer, launchControl);
+      if (source === "bufkit") {
+        // Fade stations without the chosen model. A station with no model list is left alone.
+        const filter = () => {
+          const code = BUFKIT_MODEL_CODES[form.model.value];
+          layer.setAvailable((row) => !row[6] || row[6].includes(code));
+        };
+        form.model.addEventListener("change", filter);
+        filter();
+      }
     } else if (source === "reanalysis") {
       const picker = pointPicker(map, { onPick: (lat, lon) => { form.coords.value = `${lat}, ${lon}`; } });
       form.coords.addEventListener("change", () => {
@@ -895,9 +901,8 @@ $("[data-use-in-composite]").addEventListener("click", () => {
 
 // ---- Forecast timeseries: many forecast hours of one BUFKIT site and run ----------
 
-const FORECAST_LIMITS = { gfs: 180, hrrr: 48, rap: 51, rrfs: 84, nam: 48, namnest: 60, sref: 84, hiresw: 48 }; // from SounderPy
+const FORECAST_LIMITS = { gfs: 180, hrrr: 48, rap: 51, rrfs: 84, nam: 48, namnest: 60 }; // from SounderPy
 const ARCHIVE_ONLY = ["nam", "namnest"]; // replaced by the RRFS: past runs only
-const LATEST_ONLY = ["sref", "hiresw"]; // not archived
 const seriesDialog = $(".spy-series");
 const seriesField = (name) => $(`.spy-series [name="${name}"]`);
 const seriesMode = () => $('.spy-series [name="series_mode"]:checked').value;

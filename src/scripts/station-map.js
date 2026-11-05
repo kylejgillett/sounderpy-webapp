@@ -173,8 +173,22 @@ export function createBaseMap(el, { center = [39, -96], zoom = 4 } = {}) {
   return map;
 }
 
-function stationPopup([id, name, region, , , elev]) {
-  return `<strong>${esc(id)}</strong><span>${esc([name, region].filter(Boolean).join(", "))}</span><small>${esc(elev)} m elevation · added to the form</small>`;
+// BUFKIT rows carry their models as letters (scripts/build-station-data.mjs). NAM & NAMNEST are past runs only.
+export const BUFKIT_MODEL_CODES = { hrrr: "h", rrfs: "r", rap: "a", gfs: "g", nam: "n", namnest: "m" };
+const ARCHIVE_ONLY_CODES = "nm";
+
+function modelLines(codes) {
+  const names = (keep) => Object.entries(BUFKIT_MODEL_CODES)
+    .filter(([, code]) => codes.includes(code) && keep(code)).map(([model]) => model.toUpperCase());
+  const latest = names((code) => !ARCHIVE_ONLY_CODES.includes(code)), past = names((code) => ARCHIVE_ONLY_CODES.includes(code));
+  return (latest.length ? `<small class="spy-popup-models">Models: ${latest.join(" · ")}</small>` : "")
+    + (past.length ? `<small>Past runs only: ${past.join(" · ")}</small>` : "");
+}
+
+function stationPopup([id, name, region, , , elev, models]) {
+  return `<strong>${esc(id)}</strong><span>${esc([name, region].filter(Boolean).join(", "))}</span>`
+    + (models ? modelLines(models) : "")
+    + `<small>${esc(elev)} m elevation · added to the form</small>`;
 }
 
 // At most one station per CELL x CELL pixel square at the current zoom, so dense areas stay readable.
@@ -196,11 +210,12 @@ export function stationLayer(map, rows, { onPick, style = DOT, popup = true }) {
   const entries = new Map();
   let picked = null;
   let launched = new Map(), launchedOnly = false; // id -> { hour, when, fresh }
+  let available = () => true; // stations without the chosen model fade and give way to the rest
   const launchOf = (entry) => launched.get(entry.row[0].toUpperCase());
   const launchStyle = (launch) => (launch.fresh ? LAUNCHED : LAUNCHED_OLDER);
   // The dot's outer size matches what a circleMarker with this radius and outline drew.
-  const stationIcon = (id, s, hour) => L.divIcon({
-    className: "spy-station",
+  const stationIcon = (id, s, hour, faded = false) => L.divIcon({
+    className: faded ? "spy-station is-unavailable" : "spy-station",
     html: `<i style="--d:${2 * s.radius + s.weight}px;--w:${s.weight}px;--edge:${s.color};--fill:${s.fillColor};--o:${s.fillOpacity}"></i>`
       + `<span class="${hour ? "has-launch" : ""}">${esc(id)}</span>${hour ? `<b>${esc(hour)}</b>` : ""}`,
     iconSize: null,
@@ -208,7 +223,7 @@ export function stationLayer(map, rows, { onPick, style = DOT, popup = true }) {
   const restyle = (entry) => {
     const launch = launchOf(entry);
     const s = entry === picked ? { ...PICKED, radius: launch ? LAUNCHED.radius : PICKED.radius } : launch ? launchStyle(launch) : style;
-    entry.marker.setIcon(stationIcon(entry.row[0], s, launch?.hour));
+    entry.marker.setIcon(stationIcon(entry.row[0], s, launch?.hour, entry !== picked && !available(entry.row)));
     entry.marker.setZIndexOffset(entry === picked ? 1000 : launch ? 500 : 0);
   };
 
@@ -236,7 +251,11 @@ export function stationLayer(map, rows, { onPick, style = DOT, popup = true }) {
     const inView = [...entries.values()].filter((entry) => entry !== picked && bounds.contains(entry.marker.getLatLng()));
     const isLaunched = (entry) => launched.has(entry.row[0].toUpperCase());
     inView.filter(isLaunched).forEach(claim);
-    if (!launchedOnly) inView.filter((entry) => !isLaunched(entry)).forEach(claim);
+    if (!launchedOnly) {
+      const rest = inView.filter((entry) => !isLaunched(entry));
+      rest.filter((entry) => available(entry.row)).forEach(claim);
+      rest.filter((entry) => !available(entry.row)).forEach(claim);
+    }
     for (const entry of entries.values()) {
       const show = visible.has(entry);
       if (show && !map.hasLayer(entry.marker)) entry.marker.addTo(map);
@@ -274,7 +293,14 @@ export function stationLayer(map, rows, { onPick, style = DOT, popup = true }) {
     update();
   }
 
-  return { select, setLaunches };
+  /** Fade the stations a filter rejects, such as those without the chosen model. */
+  function setAvailable(filter) {
+    available = filter;
+    entries.forEach(restyle);
+    update();
+  }
+
+  return { select, setLaunches, setAvailable };
 }
 
 /** A small row of launch-time buttons. onSelect(view) runs with the clicked button's view. */

@@ -51,6 +51,9 @@
   position: absolute; transform: translate(-50%, -50%); pointer-events: none;
   color: #1a1712; font-size: 10px; font-weight: 800; line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums;
 }
+/* Stations without the chosen model: still clickable, but faded and behind the rest. */
+.spy-station.is-unavailable { opacity: .3; }
+.spy-station.is-unavailable span { display: none; }
 @keyframes spy-station-in { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .spy-station { animation: none; } }
 
