@@ -277,7 +277,8 @@ function getSounding(form) {
   runSounding(req, { record: true });
 }
 
-// `record` adds the sounding to the address bar and browser history (see shareable links below).
+// `record` puts the sounding in the address bar (see shareable links below). It replaces the current
+// history entry rather than adding one, so Back leaves the app instead of re-fetching old soundings.
 async function runSounding(req, { record = false } = {}) {
   const id = ++requestId;
   const isComposite = req.source === "composite", isUpload = req.source === "upload";
@@ -299,7 +300,7 @@ async function runSounding(req, { record = false } = {}) {
     lastShareUrl = shareUrl;
     preparePlotFile(image, id);
     jumpToPlot(img, id);
-    if (record && shareUrl && shareUrl !== location.pathname + location.search) history.pushState(null, "", shareUrl);
+    if (record && shareUrl && shareUrl !== location.pathname + location.search) history.replaceState(null, "", shareUrl);
     setBusy(false);
     stopLoading();
   } catch (err) {
@@ -1213,11 +1214,11 @@ function openFromUrl() {
   return true;
 }
 
+// The app never adds history entries (tabs and soundings replace the current one), but a hash link
+// can: follow it to that tab without re-fetching anything.
 window.addEventListener("popstate", () => {
-  if (openFromUrl()) return;
   const tab = location.hash.slice(1);
-  showTab(isTab(tab) ? tab : currentTab, { keepUrl: true });
-  clearResult();
+  if (isTab(tab)) showTab(tab, { keepUrl: true });
 });
 
 $("[data-copy-link]").addEventListener("click", async (e) => {
