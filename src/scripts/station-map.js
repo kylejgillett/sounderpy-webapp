@@ -271,6 +271,13 @@ function stationPopup([id, name, region, , , elev, models]) {
     + `<small>${esc(elev)} m elevation · added to the form</small>`;
 }
 
+/** A BUFKIT station's details, for the station card beside the map. */
+export function bufkitCard([id, name, region, , , elev, models]) {
+  return `<strong>${esc(id)}</strong><span>${esc([name, region].filter(Boolean).join(", "))}</span>`
+    + `<small>${esc(elev)} m elevation</small>`
+    + (models ? modelLines(models) : "");
+}
+
 // RAOB rows (scripts/build-station-data.mjs): [id, name, region, lat, lon, elev, active, record, wmo, icao, igra,
 // other ICAO codes, former name, lists, known data]. Lists are letters for the station lists SounderPy's master list
 // draws on. Known data is 0 for stations that aren't active, have no IGRAv2 record and aren't in Wyoming's recent files.
@@ -288,7 +295,7 @@ export function raobIds(row) {
 /** The ID to fetch a station's soundings with. Inactive stations use IGRAv2, which holds their whole record. */
 export const raobFetchId = (row) => (!raobActive(row) && row[10]) || row[0];
 
-/** A RAOB station's popup. Its ID buttons put that ID in the form (data-use-id). */
+/** A RAOB station's details, for the station card beside the map. Its ID buttons put that ID in the form (data-use-id). */
 export function raobPopup(row, current) {
   const [id, name, region, , , elev, active, record, wmo, icao, igra, other, former, lists] = row;
   const idButton = (label, value) => value
@@ -315,13 +322,15 @@ const CELL = 44;
  * rows: [id, name, region, lat, lon, elev, ...]. Options: `ids(row)` lists every ID a station can be
  * found by (default: its own); `popupHtml(row, typedId)` writes its popup; `note(row)` adds to its tooltip.
  * A popup button with data-use-id calls onPick(row, thatId). onPick may return the ID it put in the form.
+ * `onSelect(row, typedId)` runs whenever the picked station changes (row is null when nothing matches), so a
+ * page can show the station's details outside the map, as the RAOB tab does with popup: false.
  * `dim(row)` fades a station's dot and holds its label back until DIM_LABEL_MIN_ZOOM (inactive RAOB sites).
  * `hidden(row)` leaves a station off the map, though its IDs still find it (RAOB sites with no known data).
  *
  * Each station's dot and label are one HTML marker, so they glide together while the map zooms
  * (canvas dots stretch mid-zoom and then snap back). Thinning waits until the map settles.
  */
-export function stationLayer(map, rows, { onPick, style = DOT, popup = true, ids = (row) => [row[0]], popupHtml = stationPopup, note = () => "", dim = () => false, hidden = () => false }) {
+export function stationLayer(map, rows, { onPick, onSelect = () => {}, style = DOT, popup = true, ids = (row) => [row[0]], popupHtml = stationPopup, note = () => "", dim = () => false, hidden = () => false }) {
   if (!map.getPane("stations")) {
     const pane = map.createPane("stations");
     pane.style.zIndex = 450;
@@ -418,6 +427,7 @@ export function stationLayer(map, rows, { onPick, style = DOT, popup = true, ids
     const previous = picked;
     picked = hit ?? null;
     if (previous) restyle(previous);
+    onSelect(hit?.row ?? null, typed);
     if (!hit) return false;
     restyle(hit);
     update(); // make sure the picked station is shown even where its neighbours win
@@ -447,34 +457,47 @@ export function stationLayer(map, rows, { onPick, style = DOT, popup = true, ids
   return { select, setLaunches, setAvailable };
 }
 
-/** A small row of launch-time buttons. onSelect(view) runs with the clicked button's view. */
+/**
+ * Which launches the map shows. onSelect(view) runs with the chosen view.
+ * Top right, by the radar toggle: wide maps get one row of buttons beside it, narrow ones (phones) a
+ * single "Launches" menu under it, which takes far less of the map.
+ */
 export function launchControl(map, views, onSelect) {
   map.attributionControl.addAttribution('Launches: <a href="https://mesonet.agron.iastate.edu/">IEM</a>');
-  const control = L.control({ position: "topleft" });
+  const compact = map.getSize().x < 520;
+  const control = L.control({ position: "topright" });
   control.onAdd = () => {
-    const box = L.DomUtil.create("div", "spy-launch-views");
-    box.setAttribute("role", "group");
-    box.setAttribute("aria-label", "Launches to show");
-    box.innerHTML = views.map(([view, text]) => `<button type="button" data-view="${esc(view)}" aria-pressed="false">${esc(text)}</button>`).join("");
+    const box = L.DomUtil.create("div", `spy-launch-views ${compact ? "is-menu" : "is-row"}`);
+    if (compact) {
+      box.innerHTML = `<label>Launches <select aria-label="Launches to show">${views.map(([view, text]) => `<option value="${esc(view)}">${esc(text)}</option>`).join("")}</select></label>`;
+      box.querySelector("select").addEventListener("change", (e) => onSelect(e.target.value));
+    } else {
+      box.setAttribute("role", "group");
+      box.setAttribute("aria-label", "Launches to show");
+      box.innerHTML = `<span>Launches</span>` + views.map(([view, text]) => `<button type="button" data-view="${esc(view)}" aria-pressed="false">${esc(text)}</button>`).join("");
+      box.addEventListener("click", (e) => {
+        const view = e.target.closest("button")?.dataset.view;
+        if (view) onSelect(view);
+      });
+    }
     L.DomEvent.disableClickPropagation(box);
-    box.addEventListener("click", (e) => {
-      const view = e.target.closest("button")?.dataset.view;
-      if (view) onSelect(view);
-    });
+    L.DomEvent.disableScrollPropagation(box);
     return box;
   };
   control.addTo(map);
-  const button = (view) => control.getContainer().querySelector(`[data-view="${view}"]`);
+  const box = control.getContainer();
+  const item = (view) => box.querySelector(compact ? `option[value="${view}"]` : `[data-view="${view}"]`);
   return {
     setActive(active) {
-      for (const [view] of views) button(view).setAttribute("aria-pressed", String(view === active));
+      if (compact) box.querySelector("select").value = active;
+      else for (const [view] of views) item(view).setAttribute("aria-pressed", String(view === active));
     },
     setView(view, { title = "", disabled = false } = {}) {
-      button(view).title = title;
-      button(view).disabled = disabled;
+      item(view).title = title;
+      item(view).disabled = disabled;
     },
     setLoading(view, loading) {
-      button(view).classList.toggle("is-loading", loading);
+      (compact ? box : item(view)).classList.toggle("is-loading", loading);
     },
   };
 }

@@ -20,12 +20,12 @@
 .spy-popup-choices button { padding: .3rem .6rem; border: 1px solid #ad986f; border-radius: 6px; background: #514c44; color: #f2e6cd; font-weight: 600; cursor: pointer; }
 .spy-popup-choices button:hover { border-color: #ddc386; background: #625c51; }
 /* RAOB station popups: active or inactive, and the IDs the form can use. */
-.spy-popup .leaflet-popup-content .spy-popup-active { color: #9fd3a7; font-weight: 600; }
-.spy-popup .leaflet-popup-content .spy-popup-inactive { color: #c9b48c; font-weight: 600; }
+.spy-popup .leaflet-popup-content .spy-popup-active, .spy-station-card .spy-popup-active { color: #9fd3a7; font-weight: 600; }
+.spy-popup .leaflet-popup-content .spy-popup-inactive, .spy-station-card .spy-popup-inactive { color: #c9b48c; font-weight: 600; }
 .spy-popup-ids { display: flex; flex-wrap: wrap; gap: .3rem; margin: .3rem 0 .1rem; }
 .spy-popup-ids button { padding: .2rem .5rem; border: 1px solid #7d7058; border-radius: 6px; background: #514c44; color: #f2e6cd; font: inherit; font-size: .85rem; cursor: pointer; }
 .spy-popup-ids button:hover { border-color: #ddc386; }
-.spy-popup .leaflet-popup-content .spy-popup-sources { margin-top: .25rem; padding-top: .3rem; border-top: 1px solid #5e574b; font-size: .8rem; opacity: .85; }
+.spy-popup .leaflet-popup-content .spy-popup-sources, .spy-station-card .spy-popup-sources { margin-top: .25rem; padding-top: .3rem; border-top: 1px solid #5e574b; font-size: .8rem; opacity: .85; }
 .spy-popup-ids button[aria-pressed="true"] { border-color: #7fc28a; background: #4f7a55; font-weight: 600; }
 
 /* Radar on/off toggle with the composite's valid time */
@@ -70,10 +70,25 @@
 @keyframes spy-station-in { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .spy-station { animation: none; } }
 
-/* Launch-time buttons: a slim stack under the zoom buttons */
-.spy .spy-launch-views { display: flex; flex-direction: column; margin-top: 6px !important; border: 1px solid #6e6754; border-radius: 6px; overflow: hidden; background: rgb(74 72 64 / 92%); }
-.spy-launch-views button { display: flex; align-items: center; gap: .3rem; padding: .2rem .4rem; border: 0; border-top: 1px solid #6e6754; background: transparent; color: #efe6cf; font: inherit; font-size: 11px; font-weight: 600; white-space: nowrap; cursor: pointer; }
-.spy-launch-views button:first-child { border-top: 0; }
+/* The picked RAOB station, beside the map (the RAOB tab has no in-map popups) */
+.spy-station-card {
+  display: grid; gap: .2rem; padding: .8rem 1rem; border: 1px solid #a6926d; border-radius: 8px;
+  background: #45413a; color: #f6ebd2; line-height: 1.4;
+}
+.spy-station-card[hidden] { display: none; }
+.spy-station-card strong { color: #ddc386; font-size: 1.15rem; }
+.spy-station-card small { color: #d9c9a7; font-size: .88rem; }
+
+/* Launch-time buttons, top right. Wide maps: one row to the left of the radar toggle. */
+.spy .spy-launch-views { display: flex; align-items: stretch; border: 1px solid #6e6754; border-radius: 6px; overflow: hidden; background: rgb(74 72 64 / 94%); color: #efe6cf; }
+.spy .spy-launch-views.is-row { clear: none; margin: 10px 6px 0 0 !important; }
+.spy-launch-views.is-row > span { display: flex; align-items: center; padding: .3rem .5rem; color: #b3ab95; font-size: 12px; font-weight: 600; }
+.spy-launch-views button { display: flex; align-items: center; gap: .3rem; padding: .3rem .5rem; border: 0; border-left: 1px solid #6e6754; background: transparent; color: #efe6cf; font: inherit; font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+/* Narrow maps (phones): one small "Launches" menu under the radar toggle */
+.spy .spy-launch-views.is-menu { margin: 6px 10px 0 0 !important; padding: .2rem .45rem; }
+.spy-launch-views.is-menu label { display: flex; align-items: center; gap: .35rem; margin: 0; font-size: 12px; font-weight: 600; }
+.spy .spy-launch-views.is-menu select { min-height: 0; width: auto; padding: .1rem .3rem; border: 1px solid #6e6754; border-radius: 4px; background: #4a4840; color: #efe6cf; font: inherit; font-size: 12px; }
+.spy-launch-views.is-menu.is-loading select { opacity: .6; }
 .spy-launch-views button:hover:not(:disabled) { background: #5a574d; }
 .spy-launch-views button[aria-pressed="true"] { background: #7fc28a; color: #1a1712; }
 .spy-launch-views button:disabled { color: #8f8a78; cursor: default; }

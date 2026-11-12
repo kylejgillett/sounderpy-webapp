@@ -523,6 +523,19 @@ function trackLaunches(form, map, layer, launchControl) {
   };
 }
 
+// The picked station's details, beside the map (RAOB and BUFKIT). RAOB cards' ID buttons (data-use-id) put that ID in the form.
+function showStationCard(form, row, typed, html, useId) {
+  const card = $("[data-station-card]", form);
+  if (!row) {
+    card.hidden = true;
+    card.replaceChildren();
+    return;
+  }
+  card.innerHTML = html(row, typed);
+  card.hidden = false;
+  card.querySelectorAll("[data-use-id]").forEach((button) => button.addEventListener("click", () => useId(button.dataset.useId)));
+}
+
 async function initMap(form) {
   const source = form.dataset.source;
   if (maps[source]) return maps[source].map?.invalidateSize();
@@ -531,7 +544,7 @@ async function initMap(form) {
 
   try {
     const { createBaseMap, fetchData, stationLayer, launchControl, pointPicker, airportLayer, FAINT_DOT, BUFKIT_MODEL_CODES,
-      raobPopup, raobIds, raobActive, raobHasData, raobFetchId } = await import("./station-map.js");
+      raobPopup, bufkitCard, raobIds, raobActive, raobHasData, raobFetchId } = await import("./station-map.js");
     const map = maps[source].map = createBaseMap(el);
 
     if (source === "raob" || source === "bufkit") {
@@ -542,12 +555,17 @@ async function initMap(form) {
         // Any of a station's IDs finds it. Inactive stations fade, with labels from state zoom; those with no
         // known data stay off the map but can still be typed in.
         // Inactive ones fetch from IGRAv2 unless another ID is picked.
+        // Its details show in the station card beside the map, not in a popup, so nothing covers the map.
         ? stationLayer(map, rows, {
-          ids: raobIds, popupHtml: raobPopup, note: (row) => (raobActive(row) ? "" : " · inactive"),
+          ids: raobIds, popup: false, note: (row) => (raobActive(row) ? "" : " · inactive"),
           dim: (row) => !raobActive(row), hidden: (row) => !raobHasData(row),
           onPick: (row, id = raobFetchId(row)) => pick(id),
+          onSelect: (row, typed) => showStationCard(form, row, typed, raobPopup, (id) => { pick(id); layer.select(id); }),
         })
-        : stationLayer(map, rows, { onPick: ([id]) => { pick(id); } });
+        : stationLayer(map, rows, {
+          popup: false, onPick: ([id]) => { pick(id); },
+          onSelect: (row, typed) => showStationCard(form, row, typed, bufkitCard, () => {}),
+        });
       layer.select(form.site.value);
       form.site.addEventListener("input", () => layer.select(form.site.value, { pan: true }));
       if (source === "raob") {

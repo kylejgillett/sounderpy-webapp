@@ -3,11 +3,24 @@
 // The newest release's `version` shows in the site footer.
 // `notice` is optional: a highlighted heading and line for that release's biggest news.
 export const RELEASES = [
+
+  {
+    id: "2026-11-11",
+    version: "2026.11.11",
+    date: "November 11th, 2026",
+    notice: { heading: "This is the NEW SounderPy App!", text: "Update your bookmarks to sounderpy.app" },
+    items: [
+      "Winter Soundings: in figure settings you can toggle the sounding mode to 'winter', returning a winter-focused sounding.",
+      "New RAOB map: a new global master list of WMO/ICAO/IGRAv2 sites, complied from NCAR, WMO, Unv. of Wyoming, and IGRAv2 datasets, supports a new RAOB station map with status, POR, and source information",
+      "All RAOB sources: the web app now supports fetching observations with WMO, ICAO, and IGRAv2 IDs. IRGAv2 retrieval was optimized.",
+      "Improved RAP-RUC parsing: a bug preventing thredding GRIB parsing has been fixed, supporting composite plots of RAP-RUC renalysis."
+    ],
+  },
+
   {
     id: "2026-11-04",
     version: "2026.11.04",
     date: "November 4th, 2026",
-    notice: { heading: "This is the NEW SounderPy App!", text: "Update your bookmarks to sounderpy.app" },
     items: [
       "Support for RRFS forecasts: Rapid Refresh Forecast System model profiles are available through BUFKIT.",
       "Update to v3.3.0 figures: a beta version of the coming full SounderPy release, with updated figures and figure settings, is deployed for the web app.",
