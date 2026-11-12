@@ -2,7 +2,7 @@ numpy
 pandas
 matplotlib
 requests
-sounderpy @  https://github.com/kylejgillett/sounderpy/releases/download/v3.2.0/sounderpy-3.2.0-py3-none-any.whl
+sounderpy @ git+https://github.com/kylejgillett/sounderpy.git@development
 fastapi
 uvicorn[standard]
 diskcache

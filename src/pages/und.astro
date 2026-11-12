@@ -1,0 +1,172 @@
+---
+// UND sounding ops uploader, behind one shared login (server/und.py). Unlisted: not in the nav or
+// sitemap, and kept out of search results. The page itself holds nothing secret.
+import BaseLayout from "../layouts/BaseLayout.astro";
+import UndSettings from "../components/sounding/UndSettings.astro";
+import ImageViewer from "../components/sounding/ImageViewer.astro";
+import "../styles/sounding-analysis.css";
+import "../styles/und-uploader.css";
+const title = "UND Sounding Uploader | sounderpy.app";
+const description = "Sounding uploader for the University of North Dakota Department of Atmospheric Sciences.";
+---
+<BaseLayout title={title} description={description}>
+  <meta slot="head" name="robots" content="noindex, nofollow" />
+  <article class="container spy">
+    <div class="spy-statusbar">
+      <p class="spy-health" data-state="checking">
+        <span class="spy-health-dot" aria-hidden="true"></span>
+        <span class="spy-health-text">Checking the sounding server…</span>
+      </p>
+      <button class="spy-whats-new-link" type="button" data-logout hidden>Sign out</button>
+      <p class="spy-clock"><time class="spy-utc"></time></p>
+    </div>
+
+    <header class="und-head">
+      <h1>UND Atmospheric Sciences Sounding Uploader</h1>
+      <p>University of North Dakota Department of Atmospheric Sciences · plot a launch and send it to the UND map wall</p>
+    </header>
+
+    <form class="spy-panel und-login" data-login hidden>
+      <h2>Sign in</h2>
+      <p class="spy-hint">This uploader is for the UND sounding ops crew. Ask the department for the password.</p>
+      <label>Password<input name="password" type="password" required autocomplete="current-password" /></label>
+      <button class="spy-submit" type="submit"><span>Sign in</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m0 0-5-5m5 5-5 5" /></svg></button>
+      <p class="und-login-error" role="alert"></p>
+    </form>
+
+    <div class="und-app" data-und-app hidden>
+    <form class="spy-panel spy-upload" data-source="und">
+      <div class="spy-upload-start">
+        <div class="spy-map" role="region" aria-label="Launch location map"></div>
+        <p class="spy-hint" id="und-upload-about">A GRAW, iMet, or Windsond sounding file from today's launch, up to 5 MB. The plot is drawn on the sounding server, then sent to the UND map wall, where students and the NWS can see it.</p>
+      </div>
+      <div class="spy-side">
+        <label class="spy-upload-drop">
+          <input name="file" type="file" aria-describedby="und-upload-about" />
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5" /><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4" /></svg>
+          <span class="spy-upload-text">
+            <strong>1. Choose the launch file</strong>
+            <span class="spy-upload-name">GRAW, iMet, or Windsond. Drop it here, or click to choose</span>
+            <span class="spy-upload-summary" role="status" aria-live="polite"></span>
+          </span>
+        </label>
+
+        <details class="und-section und-time" data-time-section>
+          <summary>
+            <span class="und-section-name">Launch time</span>
+            <span class="und-section-value" data-time-summary>Choose a file to fill it in</span>
+            <span class="und-section-change"><span>Change</span><span>Collapse</span></span>
+          </summary>
+          <div class="und-section-body">
+            <p class="spy-step-note" data-time-note>Filled in from the file once you choose it.</p>
+            <div class="spy-fields">
+              <label>Date (UTC)<input name="date" type="date" /></label>
+              <label>Time (UTC)<input name="time" inputmode="numeric" placeholder="e.g. 2315" autocomplete="off" /></label>
+            </div>
+            <div class="und-time-row">
+              <button class="spy-secondary" type="button" data-now>Now</button>
+              <label>Minutes ago<select name="minutes_ago">
+                <option value="">Pick…</option>
+                {[5, 10, 15, 20, 30, 45, 60, 75, 90, 120, 150, 180].map((m) => <option value={m}>{m} min ago</option>)}
+              </select></label>
+            </div>
+          </div>
+        </details>
+
+        <details class="und-section" data-site-section>
+          <summary>
+            <span class="und-section-name">Launch site</span>
+            <span class="und-section-value" data-site-summary>Grand Forks, North Dakota · 47.91, -97.03</span>
+            <span class="und-section-change"><span>Change</span><span>Collapse</span></span>
+          </summary>
+          <div class="und-section-body">
+            <p class="und-site-note" data-site-note hidden></p>
+            <div class="spy-fields">
+              <label class="spy-wide">Location name<input name="location" maxlength="40" value="Grand Forks, North Dakota" autocomplete="off" /></label>
+              <label>Latitude<input name="lat" type="number" step="any" min="-90" max="90" value="47.91" /></label>
+              <label>Longitude<input name="lon" type="number" step="any" min="-180" max="180" value="-97.03" /></label>
+              <label class="spy-wide">Elevation in meters (Windsond files only)<input name="elevation" type="number" step="any" min="-500" max="9000" value="256" /></label>
+            </div>
+            <p class="spy-step-note">Or click the map to move the launch site.</p>
+          </div>
+        </details>
+
+        <details class="und-section">
+          <summary>
+            <span class="und-section-name">Plot title</span>
+            <span class="und-section-value" data-title-summary>University of North Dakota Observed Vertical Profile</span>
+            <span class="und-section-change"><span>Change</span><span>Collapse</span></span>
+          </summary>
+          <div class="und-section-body">
+            <div class="spy-fields">
+              <label class="spy-wide">Main title<input name="title" maxlength="60" value="University of North Dakota Observed Vertical Profile" autocomplete="off" /></label>
+            </div>
+          </div>
+        </details>
+
+        <div class="spy-actions">
+          <button class="spy-settings-open" type="button" data-open-settings aria-haspopup="dialog">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10m4 0h2M4 12h4m4 0h8M4 18h12m4 0h0" /><circle cx="16" cy="6" r="2" /><circle cx="10" cy="12" r="2" /><circle cx="18" cy="18" r="2" /></svg>
+            <span>Customize figure</span>
+            <span class="spy-settings-count" hidden></span>
+          </button>
+          <button class="spy-submit" type="submit"><span>2 · Plot sounding</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13m0 0-5-5m5 5-5 5" /></svg></button>
+          <button class="und-publish" type="button" data-publish disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 0 1 16 0" /><path d="M8 12a4 4 0 0 1 8 0" /><circle cx="12" cy="12" r="1.5" /><path d="M12 14v6" /></svg>
+            <span>3 · Publish to map wall</span>
+          </button>
+          <p class="und-publish-note" data-publish-note>Plot first, then check the figure before publishing.</p>
+        </div>
+      </div>
+    </form>
+
+    <p class="spy-status" role="status" aria-live="polite" data-status></p>
+
+    <section class="spy-result und-result" data-state="empty">
+      <header class="spy-caption" hidden>
+        <div class="spy-caption-text">
+          <p class="spy-kicker">UND launch · <span data-publish-state>Not published</span></p>
+          <h2 class="spy-title"></h2>
+          <p class="spy-meta"></p>
+        </div>
+      </header>
+      <ul class="und-summary" data-summary hidden></ul>
+      <div class="spy-frame">
+        <div class="spy-placeholder">
+          <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M8 56h48M8 56V8" /><path class="spy-trace-t" d="M40 56c-2-8 2-14-2-22s4-14 0-26" /><path class="spy-trace-td" d="M26 56c2-10-4-16 0-24s-6-14-2-24" /></svg>
+          <p data-placeholder-title>Your plot will appear here</p>
+          <span data-placeholder-text>Upload the launch file and press <strong>Plot sounding</strong>. Nothing goes to the map wall until you press <strong>Publish</strong>.</span>
+        </div>
+
+        <div class="spy-loading" role="status" aria-live="polite">
+          <div class="spy-loading-card">
+            <p class="spy-loading-title">Building your sounding</p>
+            <p class="spy-loading-request"></p>
+            <ul class="spy-loading-settings"></ul>
+            <div class="spy-progress" aria-hidden="true"><span></span></div>
+            <p class="spy-loading-meta"><span class="spy-elapsed">0:00</span><span class="spy-loading-hint"></span></p>
+          </div>
+        </div>
+
+        <button class="spy-image-link" type="button" aria-label="Open the sounding in a zoomable viewer" title="Click to zoom"><img alt="" /></button>
+      </div>
+    </section>
+
+    <section class="und-launches" aria-labelledby="und-launches-title">
+      <header>
+        <h2 id="und-launches-title">Past UND launches</h2>
+        <p>Soundings sent to the map wall, newest first.</p>
+      </header>
+      <ol class="und-launch-list" data-launches></ol>
+      <p class="spy-hint" data-launches-empty hidden>No published launches yet.</p>
+    </section>
+    </div>
+
+    <UndSettings />
+    <ImageViewer downloads={false} />
+  </article>
+</BaseLayout>
+
+<script>
+  import "../scripts/und-uploader.js";
+</script>

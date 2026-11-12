@@ -19,6 +19,14 @@
 .spy-popup-choices { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .4rem; }
 .spy-popup-choices button { padding: .3rem .6rem; border: 1px solid #ad986f; border-radius: 6px; background: #514c44; color: #f2e6cd; font-weight: 600; cursor: pointer; }
 .spy-popup-choices button:hover { border-color: #ddc386; background: #625c51; }
+/* RAOB station popups: active or inactive, and the IDs the form can use. */
+.spy-popup .leaflet-popup-content .spy-popup-active { color: #9fd3a7; font-weight: 600; }
+.spy-popup .leaflet-popup-content .spy-popup-inactive { color: #c9b48c; font-weight: 600; }
+.spy-popup-ids { display: flex; flex-wrap: wrap; gap: .3rem; margin: .3rem 0 .1rem; }
+.spy-popup-ids button { padding: .2rem .5rem; border: 1px solid #7d7058; border-radius: 6px; background: #514c44; color: #f2e6cd; font: inherit; font-size: .85rem; cursor: pointer; }
+.spy-popup-ids button:hover { border-color: #ddc386; }
+.spy-popup .leaflet-popup-content .spy-popup-sources { margin-top: .25rem; padding-top: .3rem; border-top: 1px solid #5e574b; font-size: .8rem; opacity: .85; }
+.spy-popup-ids button[aria-pressed="true"] { border-color: #7fc28a; background: #4f7a55; font-weight: 600; }
 
 /* Radar on/off toggle with the composite's valid time */
 .spy .spy-radar-toggle {
@@ -51,8 +59,13 @@
   position: absolute; transform: translate(-50%, -50%); pointer-events: none;
   color: #1a1712; font-size: 10px; font-weight: 800; line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums;
 }
+/* Faded (inactive) stations' labels wait for a state-sized view. */
+.leaflet-stations-pane:not(.show-dim-labels) .spy-station.is-dim span { display: none; }
+
 /* Stations without the chosen model: still clickable, but faded and behind the rest. */
 .spy-station.is-unavailable { opacity: .3; }
+/* Inactive RAOB sites: a faded dot. */
+.spy-station.is-dim i { opacity: .45; }
 .spy-station.is-unavailable span { display: none; }
 @keyframes spy-station-in { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .spy-station { animation: none; } }
@@ -68,18 +81,33 @@
 @keyframes spy-launch-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spy-launch-views button.is-loading::after { animation: none; } }
 
-/* Phones: how to move the map */
-.spy-map-touch-note { padding: .15rem .5rem; border-radius: 4px; background: rgb(74 72 64 / 88%); color: #efe6cf; font-size: 11px; pointer-events: none; }
+/* Phones: how to move the map, shown over it for a moment when someone drags with one finger */
+.spy-map-touch-hint {
+  position: absolute; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 1rem;
+  background: rgb(26 23 18 / 55%); color: #f6ebd2; font-size: 1.05rem; font-weight: 700; text-align: center;
+  opacity: 0; transition: opacity .2s; pointer-events: none;
+}
+.spy-map-touch-hint.is-shown { opacity: 1; }
+
+/* Touch screens: bigger controls, easier to hit with a finger */
+@media (pointer: coarse) {
+  .leaflet-touch .leaflet-bar a { width: 38px; height: 38px; line-height: 38px; font-size: 22px; }
+  .spy-launch-views button { padding: .45rem .6rem; font-size: 13px; }
+  .spy .spy-radar-toggle { padding: .5rem .75rem; font-size: .9rem; }
+  .spy-radar-toggle input { width: 18px; height: 18px; }
+  .spy-popup-ids button, .spy-popup-choices button { min-height: 36px; padding: .35rem .7rem; }
+  .spy-popup .leaflet-popup-close-button { width: 32px; height: 32px; font-size: 24px; line-height: 30px; }
+}
 
 /* Town labels: a small dot with the name beside it; never intercepts clicks. */
 .leaflet-labels-pane { pointer-events: none; }
 .spy-place { width: 0; height: 0; }
 .spy-place span {
   position: absolute; left: -2px; top: -2px; display: flex; align-items: center; gap: 4px; white-space: nowrap;
-  color: #e2d6b8; font-size: 11px; font-weight: 600; letter-spacing: .02em;
-  text-shadow: 0 0 3px #2b2822, 0 0 3px #2b2822, 0 0 2px #2b2822;
+  color: rgb(226 214 184 / 50%); font-size: 11px; font-weight: 600; letter-spacing: .02em;
+  text-shadow: 0 0 3px rgb(43 40 34 / 70%);
 }
-.spy-place span::before { content: ""; flex: none; width: 4px; height: 4px; border-radius: 50%; background: #a8956a; }
+.spy-place span::before { content: ""; flex: none; width: 3px; height: 3px; border-radius: 50%; background: rgb(168 149 106 / 55%); }
 .spy-popup-busy { animation: spy-pulse 1.2s ease-in-out infinite; }
 @keyframes spy-pulse { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .spy-popup-busy { animation: none; } }

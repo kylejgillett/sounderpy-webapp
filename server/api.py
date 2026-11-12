@@ -6,17 +6,15 @@ Run from this folder with:
 """
 
 import base64
-import inspect
 import io
 import logging
-import math
 import os
 import re
 import threading
 import time
+import warnings
 import datetime as dt
 from concurrent.futures import ThreadPoolExecutor
-from functools import lru_cache
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -40,12 +38,11 @@ from fastapi.responses import Response
 from metpy.units import units
 from pydantic import BaseModel, Field, FiniteFloat, ValidationError, field_validator, model_validator
 
-from launches import get_launches, recent_launches
+from sounderpy.data import ncep_bufr
+from sounderpy.utils import SounderPyWarning, find_raob_station
 
-try:
-    from sounderpy.data import ncep_bufr  # SounderPy 3.3+: RRFS falls back to NCEP's own soundings on NOMADS
-except ImportError:
-    ncep_bufr = None
+from launches import get_launches, recent_launches
+from und import create_router as create_und_router
 
 
 logging.basicConfig(
@@ -74,6 +71,8 @@ ALLOWED_ORIGINS = [
 ]
 
 AIRPORTS_CSV_URL = ("https://raw.githubusercontent.com/kylejgillett/sounderpy/main/src/AIRPORTS.csv")
+AIRPORTS_FILE = Path(os.environ.get("AIRPORTS_FILE", str(Path(__file__).parent / "airports.csv")))  # last good copy
+AIRPORTS_RETRY_SECONDS = 300
 
 EXPORTS = {
     "csv": (".csv", "text/csv"),
@@ -129,7 +128,7 @@ UPLOAD_MAX_LEVELS = 10_000
 UPLOAD_CM1_MAX_LEVELS = 2_000  # SounderPy's reader converts level by level, which is slow
 UPLOAD_MIN_LEVELS = 10
 UPLOAD_DEFAULT_TITLE = "Custom Sounding"
-UPLOAD_PLOT_LEVELS = 150  # replace thinning with SounderPy's own argument once that's released
+UPLOAD_PLOT_LEVELS = 150  # SounderPy's max_levels for uploads (its own default, 250, for everything else)
 UPLOAD_LIMITS_PER_IP = ((60, 5), (3600, 30))  # (seconds, requests)
 UPLOAD_LIMIT_TOTAL = (3600, 120)
 UPLOAD_MAX_PENDING = 2  # plots waiting or drawing, so uploads can't crowd out the other data sources
@@ -162,30 +161,47 @@ UPLOAD_CM1_COLUMNS = {
 }
 
 
-# The map inset loads satellite tiles at a fixed detail, so zoom and latitude set how many, and a plot
-# peaks at about 0.5 GB plus 4.7 MB per tile. Measured with SounderPy 3.2.0: zoom 2 is 1.5 GB at 35N, zoom 3
-# is 2.5 GB at 35N, and zoom 5 is 10 GB at 60N, so zoom 3 and 4 can run a 2 GB droplet out of memory until
-# SounderPy's lighter tile loading arrives. The tile limit allows zoom 4 up to about 50N; past it the map zooms in.
+# SounderPy picks the map inset's satellite detail to suit its size, so a plot with the map peaks near 0.5 GB
+# at any zoom or latitude (measured with 3.3.0: zoom 4 and 8 at 35N and 53N).
 MAX_MAP_ZOOM = 4
-MAX_MAP_TILES = 1100
 
 
 # -----------------------------------------------------------------------------
 # REQUEST MODELS
 # -----------------------------------------------------------------------------
 
+# A named storm motion, or [direction (degrees), speed (kt)].
+StormMotion = Union[
+    Literal["right_moving", "left_moving", "mean_wind"],
+    Annotated[list[Annotated[FiniteFloat, Field(ge=0, le=360)]], Field(min_length=2, max_length=2)],
+]
+
+
+class SurfaceMods(BaseModel, extra="forbid"):
+    """SounderPy's modify_sfc."""
+    T: Optional[Annotated[FiniteFloat, Field(ge=-120, le=70)]] = None
+    Td: Optional[Annotated[FiniteFloat, Field(ge=-150, le=70)]] = None
+    ws: Optional[Annotated[FiniteFloat, Field(ge=0, le=300)]] = None
+    wd: Optional[Annotated[FiniteFloat, Field(ge=0, le=360)]] = None
+    method: Optional[Literal["mix", "replace", "blend"]] = None
+    depth: Optional[Annotated[FiniteFloat, Field(gt=0, le=5000)]] = None  # m AGL, blend only
+
+
 class Settings(BaseModel):
+    """Figure settings, for both data-source and uploaded soundings."""
     color_blind: bool = True
     dark_mode: bool = False
     hodo: bool = False
-    sr_hodo: bool = False  # full soundings only take it from SounderPy 3.3 (see SR_HODO_SOUNDING)
-    storm_motion: Union[str, list[float]] = "right_moving"
-    modify_sfc: Optional[dict[str, float]] = None
+    sr_hodo: bool = False
+    storm_motion: StormMotion = "right_moving"
+    modify_sfc: Optional[SurfaceMods] = None
+    winter: bool = False  # SounderPy's winter sounding
+    ylim_top: Optional[Literal[500]] = None  # 500: show the skew-t from 1050 to 500 hPa (see LOW_LEVEL_YLIM)
     ecape: bool = False
     map_zoom: int = Field(default=0, ge=0, le=MAX_MAP_ZOOM)
     radar: Optional[Literal["single-site", "mosaic"]] = None
-    radar_time: Optional[dt.datetime] = None  # UTC; defaults to sounding time
-    hodo_boundary_angle: Optional[float] = None
+    radar_time: Optional[dt.datetime] = None  # UTC; defaults to the sounding's date and time
+    hodo_boundary_angle: Optional[Annotated[FiniteFloat, Field(ge=0, le=360)]] = None
 
 
 class SoundingRequest(BaseModel):
@@ -200,21 +216,25 @@ class SoundingRequest(BaseModel):
     profile: Optional[str] = None
     model: Optional[str] = None
     fcst_hr: Optional[int] = None
-    lat: Optional[float] = None
-    lon: Optional[float] = None
+    lat: Optional[Annotated[FiniteFloat, Field(ge=-90, le=90)]] = None
+    lon: Optional[Annotated[FiniteFloat, Field(ge=-180, le=180)]] = None
     date: Optional[dt.date] = None
     hour: Optional[str] = None
+
+    @field_validator("hour")
+    @classmethod
+    def utc_hour(cls, value):
+        """'7' or '07' -> '07'. Blank means no hour (a BUFKIT run left as the latest)."""
+        if value is None or not value.strip():
+            return None
+        if not re.fullmatch(r"\d{1,2}", value.strip()) or int(value) > 23:
+            raise ValueError("hour must be a UTC hour from 0 to 23")
+        return f"{int(value):02d}"
 
 
 MAX_COMPOSITE_PROFILES = 6
 COMPOSITE_FETCH_WORKERS = 4  # fetched side by side; drawing still takes turns under PLOT_LOCK
-
-
-# A named storm motion, or [direction (degrees), speed (kt)].
-StormMotion = Union[
-    Literal["right_moving", "left_moving", "mean_wind"],
-    Annotated[list[Annotated[FiniteFloat, Field(ge=0, le=360)]], Field(min_length=2, max_length=2)],
-]
+ACARS_FETCH_WORKERS = 6  # an airport search lists all 24 hours, a few at a time
 
 
 class CompositeSettings(BaseModel):
@@ -226,7 +246,7 @@ class CompositeSettings(BaseModel):
     ls_to_use: Optional[list[Literal["-", "--", ":", "-."]]] = None
     lw_to_use: Optional[list[float]] = None
     alphas_to_use: Optional[list[float]] = None
-    # Newer SounderPy only (3.3+): which panels, a storm-relative hodograph, the parameter table, and the storm motion.
+    # Which panels, a storm-relative hodograph, the parameter table, and the storm motion.
     style: Literal["full", "sounding", "hodograph"] = "full"
     sr_hodo: bool = False
     show_params: bool = True
@@ -236,28 +256,6 @@ class CompositeSettings(BaseModel):
 class CompositeRequest(BaseModel):
     profiles: list[SoundingRequest]
     settings: CompositeSettings = Field(default_factory=CompositeSettings)
-
-
-class UploadSfc(BaseModel, extra="forbid"):
-    T: Optional[Annotated[FiniteFloat, Field(ge=-120, le=70)]] = None
-    Td: Optional[Annotated[FiniteFloat, Field(ge=-150, le=70)]] = None
-    ws: Optional[Annotated[FiniteFloat, Field(ge=0, le=300)]] = None
-    wd: Optional[Annotated[FiniteFloat, Field(ge=0, le=360)]] = None
-
-
-class UploadSettings(BaseModel):
-    """The figure settings an upload may use."""
-    color_blind: bool = True
-    dark_mode: bool = False
-    hodo: bool = False
-    sr_hodo: bool = False
-    storm_motion: StormMotion = "right_moving"
-    modify_sfc: Optional[UploadSfc] = None
-    ecape: bool = False
-    map_zoom: int = Field(default=0, ge=0, le=MAX_MAP_ZOOM)
-    radar: Optional[Literal["single-site", "mosaic"]] = None
-    radar_time: Optional[dt.datetime] = None  # UTC; defaults to the sounding's date and time
-    hodo_boundary_angle: Optional[Annotated[FiniteFloat, Field(ge=0, le=360)]] = None
 
 
 class UploadCm1(BaseModel):
@@ -278,7 +276,7 @@ class UploadRequest(BaseModel):
     lon: Annotated[FiniteFloat, Field(ge=-180, le=180)]
     rows: Optional[list[tuple[FiniteFloat, FiniteFloat, FiniteFloat, FiniteFloat, FiniteFloat, FiniteFloat]]] = Field(default=None, max_length=UPLOAD_MAX_LEVELS)
     cm1: Optional[UploadCm1] = None
-    settings: UploadSettings = Field(default_factory=UploadSettings)
+    settings: Settings = Field(default_factory=Settings)
 
     @field_validator("title", "location", "right_title")
     @classmethod
@@ -299,41 +297,42 @@ class UploadRequest(BaseModel):
 # HELPERS
 # -----------------------------------------------------------------------------
 
-@lru_cache(maxsize=1)
-def _get_airports_df():
-    """Load the airport metadata once per server process."""
-    response = requests.get(AIRPORTS_CSV_URL, timeout=15)
-    response.raise_for_status()
-    return pd.read_csv(
-        io.StringIO(response.text),
-        skiprows=7,
-        skipinitialspace=True,
-    )
+UNKNOWN_AIRPORT = {"airport": "Unknown Airport", "lat": None, "lon": None}
+AIRPORTS_LOCK = threading.Lock()
+AIRPORTS = {"table": None, "next_try": 0.0}
 
 
-@lru_cache(maxsize=512)
+def _airport_table(text):
+    """{IATA code: {airport, lat, lon}} from SounderPy's airport list. The first row for a code wins."""
+    df = pd.read_csv(io.StringIO(text), skiprows=7, skipinitialspace=True)
+    table = {}
+    for code, name, city, lat, lon in zip(df["IATA"].astype(str).str.strip().str.upper(),
+                                          df["Name"], df["City"], df["Latitude"], df["Longitude"]):
+        table.setdefault(code, {"airport": f"{name}, {city}", "lat": round(float(lat), 3), "lon": round(float(lon), 3)})
+    return table
+
+
+def _airports():
+    """The airport table, downloaded once per process. If GitHub can't be reached, the last saved copy
+    is used, and the download is tried again every AIRPORTS_RETRY_SECONDS rather than on every lookup."""
+    with AIRPORTS_LOCK:
+        if AIRPORTS["table"] is None and time.time() >= AIRPORTS["next_try"]:
+            try:
+                response = requests.get(AIRPORTS_CSV_URL, timeout=15)
+                response.raise_for_status()
+                AIRPORTS["table"] = _airport_table(response.text)
+                AIRPORTS_FILE.write_text(response.text)
+            except Exception:
+                LOGGER.exception("Unable to download the airports list")
+                AIRPORTS["next_try"] = time.time() + AIRPORTS_RETRY_SECONDS
+                if AIRPORTS_FILE.exists():
+                    AIRPORTS["table"] = _airport_table(AIRPORTS_FILE.read_text())
+        return AIRPORTS["table"] or {}
+
+
 def _airport_info(iata):
     """Name and coordinates for an airport code (coordinates may be None)."""
-    unknown = {"airport": "Unknown Airport", "lat": None, "lon": None}
-    try:
-        airports = _get_airports_df()
-    except Exception:
-        LOGGER.exception("Unable to load airports list")
-        return unknown
-
-    code = str(iata).strip().upper()
-    iata_col = airports["IATA"].astype(str).str.strip().str.upper()
-    matches = airports.loc[iata_col == code]
-
-    if matches.empty:
-        return unknown
-
-    row = matches.iloc[0]
-    return {
-        "airport": f"{row['Name']}, {row['City']}",
-        "lat": round(float(row["Latitude"]), 3),
-        "lon": round(float(row["Longitude"]), 3),
-    }
+    return _airports().get(str(iata).strip().upper(), UNKNOWN_AIRPORT)
 
 
 def _ymd(day):
@@ -411,6 +410,30 @@ PROVIDERS = {
 }
 
 
+IGRA_PROVIDER = "NOAA's IGRAv2 archive"
+
+
+def _is_igra(site):
+    """SounderPy fetches 11-character IDs ('USM00072357') from IGRAv2, and the rest from Wyoming."""
+    return len((site or "").strip()) == 11
+
+
+def _provider(req):
+    return IGRA_PROVIDER if req.source == "raob" and _is_igra(req.site) else PROVIDERS[req.source]
+
+
+def _station_record(site, day):
+    """' Its IGRAv2 record runs 1957–1961.' when the date is outside the station's record, else ''."""
+    if not day:
+        return ""
+    try:
+        row = find_raob_station(site)
+        first, last = int(row["IGRA_FIRST_YEAR"]), int(row["IGRA_LAST_YEAR"])
+    except (ValueError, KeyError):
+        return ""
+    return f" Its IGRAv2 record runs {first}–{last}." if not first <= day.year <= last else ""
+
+
 def _when(req):
     """'12Z on Oct 29, 2026', or '' when there's no date/hour."""
     if not req.date or req.hour in (None, ""):
@@ -425,20 +448,28 @@ def _friendly_error(req, exc):
     when = _when(req)
 
     unreachable = isinstance(exc, (requests.Timeout, requests.ConnectionError)) or any(
-        phrase in lower for phrase in ("could not be reached", "temporarily unavailable", "currently returning http"))
+        phrase in lower for phrase in ("could not be reached", "temporarily unavailable", "currently returning http",
+                                       "unavailable right now"))
     if unreachable:
-        return f"{PROVIDERS[req.source]} isn't responding right now. This is usually temporary, so please try again in a few minutes."
+        return f"{_provider(req)} isn't responding right now. This is usually temporary, so please try again in a few minutes."
 
     if req.source == "raob":
         site = req.site.strip().upper()
-        if "not found" in lower:
-            return f"“{site}” isn't a known upper-air station. Click a station on the map, or use its ID (e.g. OAX, KOAX, or WMO 72558)."
-        return (f"No observed sounding for {site} at {when}. Most stations launch only at 00Z and 12Z, new soundings "
-                "can take an hour or two to appear, and the University of Wyoming archive is occasionally down.")
+        if "station list" in lower:
+            return (f"“{site}” isn't a known upper-air station. Click a station on the map, or use its ICAO, WMO, or "
+                    "IGRAv2 ID (e.g. OAX, KOAX, 72558, or USM00072558).")
+        if "no wmo or icao id" in lower:
+            igra = re.search(r"'([A-Z0-9]{11})'", text)
+            return f"{site} can only be fetched from IGRAv2" + (f": use its IGRAv2 ID, {igra.group(1)}." if igra else ", by its IGRAv2 ID.")
+        record = _station_record(site, req.date)
+        if _is_igra(site):
+            return f"No IGRAv2 sounding for {site} at {when}.{record} Try another date or time; many stations launched only at 00Z and 12Z."
+        return (f"No observed sounding for {site} at {when}.{record} Most stations launch only at 00Z and 12Z, new soundings "
+                "can take an hour or two to appear, and older dates may only be in IGRAv2 (pick the station's IGRAv2 ID on the map).")
 
     if req.source == "bufkit":
         site, model = req.site.strip().upper(), req.model.upper()
-        if "valid bufkit site" in lower or "doesn't seem to exist" in lower:  # 3.2.0 and 3.3 wording
+        if "doesn't seem to exist" in lower:
             return f"“{site}” isn't a BUFKIT site. Click a station on the map to pick one."
         if "invalid forecast hour" in lower:
             limit = re.search(r"up to F0*(\d+)", text)
@@ -576,25 +607,35 @@ def _fetch_data(req, use_cache=True):
     return result
 
 
-def _map_tiles(lat, zoom):
-    """How many level-10 satellite tiles SounderPy's map inset covers (see plot.py's set_extent)."""
-    def row(degrees):  # Web Mercator
-        return (1 - math.asinh(math.tan(math.radians(max(min(degrees, 85), -85)))) / math.pi) / 2 * 1024
-    return (int(2 * zoom / 360 * 1024) + 2) * (int(row(lat - zoom / 1.6) - row(lat + zoom * 1.6)) + 2)
+def _modify_sfc(mods):
+    """SounderPy's modify_sfc dict, or None when no surface value changes."""
+    if not mods:
+        return None
+    values = mods.model_dump(include={"T", "Td", "ws", "wd"}, exclude_none=True)
+    if not values:
+        return None
+    if mods.method:
+        values["method"] = mods.method
+        if mods.method == "blend" and mods.depth is not None:
+            values["depth"] = mods.depth
+    return values
 
 
-def _safe_map_zoom(lat, zoom):
-    while zoom > 0 and _map_tiles(lat, zoom) > MAX_MAP_TILES:
-        zoom -= 1
-    return zoom
+# The skew-t's low-level view, (bottom, top) in hPa.
+LOW_LEVEL_YLIM = (1050, 500)
 
 
-# SounderPy 3.2.0's full sounding has no sr_hodo, so there it stays ground relative.
-SR_HODO_SOUNDING = "sr_hodo" in inspect.signature(spy.build_sounding).parameters
+def _web_note(message):
+    """A SounderPy figure warning in the page's words: no Python or CLI hints like "(radar='single', ...)"."""
+    text = re.sub(r"\s*\([^)]*(?:radar=|CLI)[^)]*\)", "", " ".join(str(message).split()))
+    text = text.replace("Use the nearest NEXRAD site", "Choose the NEXRAD site radar")
+    return text if text.endswith(".") else text + "."
 
 
-def _render_png(clean_data, s):
-    """Render a sounding or hodograph and return the PNG bytes."""
+def _render_png(clean_data, s, max_levels=None):
+    """Render a sounding or hodograph. Returns (PNG bytes, notes): notes are SounderPy's warnings about
+    the figure, such as radar that couldn't be drawn, for the page to show. max_levels overrides
+    SounderPy's default level limit."""
     storm_motion = s.storm_motion
     if isinstance(storm_motion, list):
         storm_motion = [int(v) for v in storm_motion]
@@ -602,10 +643,10 @@ def _render_png(clean_data, s):
     common = dict(
         dark_mode=s.dark_mode,
         storm_motion=storm_motion,
-        modify_sfc=s.modify_sfc or None,  # None, not False: SounderPy 3.3 reads False as a dict
+        modify_sfc=_modify_sfc(s.modify_sfc),  # None, not False: SounderPy reads False as a dict
         radar=s.radar,
         radar_time=s.radar_time.replace(tzinfo=None) if s.radar_time else "sounding",
-        map_zoom=_safe_map_zoom(float(clean_data["site_info"]["site-latlon"][0]), s.map_zoom),
+        map_zoom=s.map_zoom,
         hodo_boundary=(
             {"angle": [s.hodo_boundary_angle], "color": ["brown"]}
             if s.hodo_boundary_angle is not None
@@ -613,54 +654,41 @@ def _render_png(clean_data, s):
         ),
         save=True,
     )
+    if max_levels:
+        common["max_levels"] = max_levels
 
     with TemporaryDirectory(prefix="sounderpy_plot_") as tmpdir:
         output = Path(tmpdir) / "plot.png"
 
-        with PLOT_LOCK:
+        with PLOT_LOCK, warnings.catch_warnings(record=True) as caught:
+            # warnings' filters are process-wide, which is fine here: plotting takes turns under PLOT_LOCK
+            warnings.simplefilter("always")
             try:
                 if s.hodo:
                     spy.build_hodograph(clean_data, sr_hodo=s.sr_hodo, filename=str(output), **common)
                 else:
-                    spy.build_sounding(
-                        clean_data,
-                        color_blind=s.color_blind,
-                        special_parcels=None if s.ecape else "simple",
-                        filename=str(output),
-                        **({"sr_hodo": s.sr_hodo} if SR_HODO_SOUNDING else {}),
-                        **common,
-                    )
+                    kwargs = dict(common, color_blind=s.color_blind, filename=str(output))
+                    if s.ylim_top:
+                        kwargs["ylim"] = LOW_LEVEL_YLIM
+                    if s.winter:
+                        # The winter sounding has no ECAPE parcels, storm-relative hodograph, or boundary
+                        # line, and warns when they're set, so they're left at their defaults.
+                        kwargs.update(mode="winter", hodo_boundary=None)
+                    else:
+                        kwargs.update(special_parcels=None if s.ecape else "simple", sr_hodo=s.sr_hodo)
+                    spy.build_sounding(clean_data, **kwargs)
             finally:
                 plt.close("all")
 
-        return output.read_bytes()
-
-
-# SounderPy 3.3 renamed the line-style lists and added options. Ask the installed version what it takes,
-# so this file works with either until the droplet is upgraded.
-COMPOSITE_ARGS = set(inspect.signature(spy.build_composite).parameters)
-NEW_COMPOSITE_OPTIONS = {"style": "full", "sr_hodo": False, "show_params": True, "storm_motion": "right_moving"}
-
-
-def _composite_kwargs(s):
-    """build_composite's arguments for these settings. Raises 422 for an option this SounderPy lacks."""
-    if "linestyles" in COMPOSITE_ARGS:
-        kwargs = dict(colors=s.colors_to_use, linestyles=s.ls_to_use, linewidths=s.lw_to_use, alphas=s.alphas_to_use)
-    else:
-        kwargs = dict(colors_to_use=s.colors_to_use or "none", ls_to_use=s.ls_to_use or "none",
-                      lw_to_use=s.lw_to_use or "none", alphas_to_use=s.alphas_to_use or "none")
-    for name, default in NEW_COMPOSITE_OPTIONS.items():
-        value = getattr(s, name)
-        if name in COMPOSITE_ARGS:
-            kwargs[name] = value
-        elif value != default:
-            raise HTTPException(422, "That composite option needs a newer SounderPy than this server has. Reset it and try again.")
-    return kwargs
+        # SounderPy's figure warnings, plus its parcel warnings (plain Warnings), e.g. no most-unstable parcel
+        # for an old sounding without dewpoints.
+        notes = list(dict.fromkeys(_web_note(w.message) for w in caught if issubclass(w.category, SounderPyWarning)
+                                   or "parcel could not be computed" in str(w.message)))
+        return output.read_bytes(), notes
 
 
 def _render_composite(data_list, s):
     """Render a composite of several profiles and return the PNG bytes."""
-    kwargs = _composite_kwargs(s)
     with TemporaryDirectory(prefix="sounderpy_composite_") as tmpdir:
         output = Path(tmpdir) / "composite.png"
 
@@ -671,9 +699,16 @@ def _render_composite(data_list, s):
                     shade_between=s.shade_between,
                     cmap=s.cmap,
                     dark_mode=s.dark_mode,
+                    colors=s.colors_to_use,
+                    linestyles=s.ls_to_use,
+                    linewidths=s.lw_to_use,
+                    alphas=s.alphas_to_use,
+                    style=s.style,
+                    sr_hodo=s.sr_hodo,
+                    show_params=s.show_params,
+                    storm_motion=s.storm_motion,
                     save=True,
                     filename=str(output),
-                    **kwargs,
                 )
             finally:
                 plt.close("all")
@@ -804,7 +839,7 @@ def _cm1_rows(cm1):
         with open(path, "w") as f:
             f.write(f"{cm1.surface_pressure:.6f} {cm1.surface_theta:.6f} {cm1.surface_qv:.6f}\n")
             np.savetxt(f, rows, fmt="%.6f")
-        data = spy.make_cm1_profile(str(path), {
+        data = spy.from_cm1(str(path), {
             "elev": cm1.elevation, "latlon": [0.0, 0.0], "top_title": "", "left_title": "", "right_title": "",
         })
 
@@ -845,13 +880,6 @@ def _check_upload_levels(req, rows):
     if len(keep) < UPLOAD_MIN_LEVELS:
         raise HTTPException(422, f"The sounding needs at least {UPLOAD_MIN_LEVELS} levels that rise with height; this one has {len(keep)}.")
     return rows[keep]
-
-
-def _thin_levels(rows):
-    """At most UPLOAD_PLOT_LEVELS evenly spaced levels, always keeping the surface and the top."""
-    if len(rows) <= UPLOAD_PLOT_LEVELS:
-        return rows
-    return rows[np.linspace(0, len(rows) - 1, UPLOAD_PLOT_LEVELS).round().astype(int)]
 
 
 def _upload_label(req):
@@ -904,17 +932,13 @@ def _plot_upload(req):
         except (Exception, SystemExit) as exc:  # SounderPy's reader; logged without the data, as below
             LOGGER.error("CM1 upload of %d levels failed to convert: %s", received, type(exc).__name__)
             raise HTTPException(422, "This CM1 sounding couldn't be converted. Check the file's columns and units.")
-        checked = _check_upload_levels(req, source)
-        rows = _thin_levels(checked)
-        s = req.settings
-        settings = Settings(
-            **s.model_dump(exclude={"modify_sfc", "map_zoom", "storm_motion"}),
-            storm_motion=s.storm_motion,
-            modify_sfc=s.modify_sfc.model_dump(exclude_none=True) or None if s.modify_sfc else None,
-            map_zoom=s.map_zoom or (2 if s.radar else 0),  # radar is drawn on the map
-        )
+        rows = _check_upload_levels(req, source)
+        plotted = min(len(rows), UPLOAD_PLOT_LEVELS)
+        settings = req.settings
+        if settings.radar and not settings.map_zoom:  # radar is drawn on the map
+            settings = settings.model_copy(update={"map_zoom": 2})
         try:
-            png = _render_png(_upload_clean_data(req, rows), settings)
+            png, notes = _render_png(_upload_clean_data(req, rows), settings, max_levels=UPLOAD_PLOT_LEVELS)
         # Logged without the traceback's locals or any of the data: it may be unpublished.
         except (Exception, SystemExit) as exc:
             LOGGER.error("upload of %d levels failed to draw: %s", len(rows), type(exc).__name__)
@@ -926,11 +950,12 @@ def _plot_upload(req):
     finally:
         UPLOAD_PENDING.release()
 
-    LOGGER.info("upload %s levels=%d/%d/%d served in %.1fs", "cm1" if req.cm1 else "sharppy", received, len(checked), len(rows), time.time() - started)
+    LOGGER.info("upload %s levels=%d/%d/%d served in %.1fs", "cm1" if req.cm1 else "sharppy", received, len(rows), plotted, time.time() - started)
     return {
         "label": _upload_label(req),
         "info": None,
-        "levels": {"received": received, "plotted": len(rows)},
+        "levels": {"received": received, "plotted": plotted},
+        "notes": notes,
         "image": "data:image/png;base64," + base64.b64encode(png).decode("ascii"),
     }
 
@@ -940,8 +965,6 @@ LATEST_RUN_STATION_NUM = 253  # KMOP's NCEP station number (NUM in SounderPy's B
 
 def _newer_nomads_rrfs(psu_run):
     """The newest RRFS run on NOMADS that's newer than Penn State's, or None. Checks file headers only."""
-    if ncep_bufr is None:
-        return None
     run = ncep_bufr.latest_expected_rrfs_run()
     for _ in range(8):  # NOMADS keeps about two days
         if psu_run is not None and run <= psu_run:
@@ -956,41 +979,39 @@ def _newer_nomads_rrfs(psu_run):
     return None
 
 
+def _latest_run(model, station="KMOP"):
+    """{model, latest_run} for one BUFKIT model, from the header of a Penn State file."""
+    model3 = "gfs3" if model == "gfs" else model
+    data_url = f"http://www.meteo.psu.edu/bufkit/data/{model.upper()}/{model3}_{station.lower()}.buf"
+
+    try:
+        response = requests.get(data_url, timeout=10)
+        response.raise_for_status()
+        lines = response.text.splitlines()
+
+        if len(lines) < 5 or "TIME" not in lines[4]:
+            raise ValueError("BUFKIT header does not contain expected TIME field")
+
+        run_line = lines[4]
+        start = run_line.index("TIME") + 7
+        run_time = run_line[start:start + 11]  # YYMMDD/HHMM
+        latest = dt.datetime(2000 + int(run_time[0:2]), int(run_time[2:4]), int(run_time[4:6]), int(run_time[7:9]))
+
+    except Exception:
+        LOGGER.exception("Unable to determine latest %s BUFKIT run", model)
+        latest = None
+
+    # SounderPy uses NOMADS's RRFS run when Penn State's is older, so the label should say so too.
+    if model == "rrfs":
+        latest = _newer_nomads_rrfs(latest) or latest
+
+    return {"model": model, "latest_run": f"{latest:%m/%d %H}Z" if latest else None}
+
+
 def _fetch_latest_runs():
-    runs = []
-    station = "KMOP"
-
-    for model in BUFKIT_MODELS:
-        model3 = "gfs3" if model == "gfs" else model
-        data_url = (
-            f"http://www.meteo.psu.edu/bufkit/data/"
-            f"{model.upper()}/{model3}_{station.lower()}.buf"
-        )
-
-        try:
-            response = requests.get(data_url, timeout=10)
-            response.raise_for_status()
-            lines = response.text.splitlines()
-
-            if len(lines) < 5 or "TIME" not in lines[4]:
-                raise ValueError("BUFKIT header does not contain expected TIME field")
-
-            run_line = lines[4]
-            start = run_line.index("TIME") + 7
-            run_time = run_line[start:start + 11]  # YYMMDD/HHMM
-            latest = dt.datetime(2000 + int(run_time[0:2]), int(run_time[2:4]), int(run_time[4:6]), int(run_time[7:9]))
-
-        except Exception:
-            LOGGER.exception("Unable to determine latest %s BUFKIT run", model)
-            latest = None
-
-        # SounderPy uses NOMADS's RRFS run when Penn State's is older, so the label should say so too.
-        if model == "rrfs":
-            latest = _newer_nomads_rrfs(latest) or latest
-
-        runs.append({"model": model, "latest_run": f"{latest:%m/%d %H}Z" if latest else None})
-
-    return runs
+    """The latest run of each BUFKIT model, all checked at once."""
+    with ThreadPoolExecutor(max_workers=len(BUFKIT_MODELS)) as pool:
+        return list(pool.map(_latest_run, BUFKIT_MODELS))
 
 
 # -----------------------------------------------------------------------------
@@ -1005,13 +1026,18 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],
     expose_headers=["Content-Disposition"],
+    # The UND uploader's login cookie (und.py). Origins stay an explicit list, never "*".
+    allow_credentials=True,
 )
+
+# The password-protected UND sounding ops uploader. Its routes refuse everything until
+# UND_PASSWORD_HASH and UND_SECRET are set (see und.py).
+app.include_router(create_und_router(spy, _render_png, Settings))
 
 
 @app.get("/api/health")
 def health():
-    # `sr_hodo_sounding` tells the page whether full soundings can be storm relative.
-    return {"online": True, "sounderpy_version": SOUNDERPY_VERSION, "sr_hodo_sounding": SR_HODO_SOUNDING}
+    return {"online": True, "sounderpy_version": SOUNDERPY_VERSION}
 
 
 @app.get("/api/bufkit/latest-runs")
@@ -1056,15 +1082,19 @@ def acars_profiles(
 
     hours = [_hour(hour)] if not airport else [f"{h:02d}" for h in range(24)]
     airport = airport.strip().upper() if airport else None
-    results = []
 
-    for hour_str in hours:
+    def list_hour(hour_str):
         try:
-            profiles = spy.acars_data(*_ymd(day), hour_str).list_profiles()
+            return spy.acars_data(*_ymd(day), hour_str).list_profiles()
         except Exception:
             LOGGER.debug("No ACARS result for %s %sZ", day, hour_str, exc_info=True)
-            continue
+            return []
 
+    with ThreadPoolExecutor(max_workers=ACARS_FETCH_WORKERS) as pool:
+        listed = list(pool.map(list_hour, hours))
+
+    results = []
+    for hour_str, profiles in zip(hours, listed):
         for profile in profiles:
             if airport and airport not in profile:
                 continue
@@ -1103,7 +1133,7 @@ def sounding(req: SoundingRequest):
                 headers={"Content-Disposition": f'attachment; filename="{filename}"'},
             )
 
-        png = _render_png(clean_data, req.settings)
+        png, notes = _render_png(clean_data, req.settings)
     except (Exception, SystemExit):
         LOGGER.exception("Rendering failed for %s", req.model_dump())
         raise HTTPException(
@@ -1116,6 +1146,7 @@ def sounding(req: SoundingRequest):
     return {
         "label": label,
         "info": _sounding_info(clean_data, req.source),
+        "notes": notes,
         "image": "data:image/png;base64," + base64.b64encode(png).decode("ascii"),
     }
 
@@ -1180,7 +1211,6 @@ def _settle_latest_runs(profiles, results):
 def composite(req: CompositeRequest):
     """Fetch every profile, then return one composite plot as JSON ({label, image})."""
     _check_composite(req)
-    _composite_kwargs(req.settings)  # an option this SounderPy lacks fails before any fetching
     started = time.time()
 
     results = _fetch_profiles(req.profiles)

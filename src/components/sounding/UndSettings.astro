@@ -1,0 +1,51 @@
+---
+// The UND uploader's figure settings: a trimmed copy of FigureSettings (no hodograph, dark mode, or ECAPE),
+// with UND's defaults checked. Field names match FigureSettings so the request can be built the same way.
+---
+<dialog class="spy-settings" id="settings" aria-labelledby="spy-settings-title">
+  <header class="spy-settings-head">
+    <h2 id="spy-settings-title">Customize figure</h2>
+    <button class="spy-settings-x" type="button" data-close-settings aria-label="Close">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+    </button>
+  </header>
+
+  <form class="spy-settings-form">
+    <div class="spy-settings-grid">
+      <fieldset>
+        <legend>Appearance</legend>
+        <label class="spy-check"><input type="checkbox" name="winter" checked />Winter sounding (precipitation type, snow growth)</label>
+        <label class="spy-check"><input type="checkbox" name="color_blind" checked />Color-blind friendly</label>
+        <label>Pressure range<select name="ylim_top"><option value="">Full sounding</option><option value="500">Surface to 500 hPa (1050–500)</option></select></label>
+      </fieldset>
+      <fieldset>
+        <legend>Map &amp; radar</legend>
+        <div class="spy-map-zoom">
+          <label>Map zoom (1 to 4)<input name="map_zoom" type="number" min="0" max="4" value="1" /></label>
+          <label class="spy-check"><input type="checkbox" data-map-toggle checked />Show map</label>
+        </div>
+        <label>Radar Source (NEXRAD site or MRMS)<select name="radar"><option value="">None</option><option value="single-site" selected>NEXRAD site (nearest radar)</option><option value="mosaic">MRMS mosaic</option></select></label>
+        <label>Radar time<select name="radar_when"><option value="sounding" selected>Sounding time</option><option value="custom">Custom time</option></select></label>
+        <label data-radar-custom hidden>Radar time (UTC)<input name="radar_time" type="datetime-local" /></label>
+      </fieldset>
+      <fieldset>
+        <legend>Modify surface values</legend>
+        <div class="spy-pair spy-quad">
+          <label>T<input name="sfc_T" type="number" step="any" placeholder="°C" /></label>
+          <label>Td<input name="sfc_Td" type="number" step="any" placeholder="°C" /></label>
+          <label>Wind speed<input name="sfc_ws" type="number" step="any" placeholder="kts" /></label>
+          <label>Wind dir<input name="sfc_wd" type="number" step="any" placeholder="deg" /></label>
+        </div>
+        <div class="spy-pair">
+          <label>Method<select name="sfc_method" title="Mix: a warmer surface mixes up its dry adiabat. Replace: only the surface level changes. Blend: changes fade out by the depth."><option value="mix">Mix (default)</option><option value="replace">Replace surface only</option><option value="blend">Blend to a depth</option></select></label>
+          <label data-sfc-depth hidden>Blend depth<input name="sfc_depth" type="number" min="1" max="5000" step="any" placeholder="500 m" /></label>
+        </div>
+      </fieldset>
+    </div>
+  </form>
+
+  <div class="spy-settings-actions">
+    <button class="spy-secondary" type="button" data-settings-reset>Reset to defaults</button>
+    <button class="spy-secondary spy-settings-done" type="button" data-close-settings>Done</button>
+  </div>
+</dialog>

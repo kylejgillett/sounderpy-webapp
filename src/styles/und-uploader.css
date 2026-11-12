@@ -1,0 +1,102 @@
+/* UND sounding uploader: the page heading and the time shortcuts. Everything else comes from sounding-analysis.css. */
+
+.und-head { margin: 1.5rem 0 1rem; }
+.und-head h1 { margin: 0; color: var(--ink); font-size: clamp(1.4rem, 3.2vw, 2rem); line-height: 1.2; }
+.und-head p { margin: .35rem 0 0; color: var(--ink-soft); }
+
+.und-time-row { display: flex; flex-wrap: wrap; align-items: end; gap: .85rem; margin-top: .85rem; }
+.und-time-row label { flex: 1 1 8rem; }
+.und-time-row + .spy-fields { margin-top: .85rem; }
+
+/* Brighter, slightly larger town names than the main app's map, since this one is zoomed in to the region */
+[data-source="und"] .spy-place span { color: rgb(244 234 210 / 88%); font-size: 12px; text-shadow: 0 0 3px rgb(30 27 22 / 95%), 0 0 1px rgb(30 27 22); }
+[data-source="und"] .spy-place span::before { width: 4px; height: 4px; background: rgb(226 205 160 / 85%); }
+
+[data-source="und"] .spy-upload-name.is-error { color: #f0a58a; }
+
+/* Step 2: publish, a quieter green button that wakes up once there's a plot */
+.und-publish {
+  display: inline-flex; align-items: center; justify-content: center; gap: .6rem; min-height: 3.1rem;
+  border: 1px solid var(--moss); border-radius: 8px; background: rgb(127 194 138 / 12%);
+  color: var(--ink); font-size: 1rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; cursor: pointer;
+}
+.und-publish svg { width: 1.3rem; height: 1.3rem; fill: none; stroke: #9cc17f; stroke-width: 2; stroke-linecap: round; }
+.und-publish:hover:not([disabled]) { background: rgb(127 194 138 / 22%); }
+.spy .und-publish[disabled] { opacity: .45; cursor: not-allowed; }
+.und-publish-note { margin: 0; color: var(--ink-soft); font-size: .88rem; text-align: center; }
+.und-publish-note.is-done { color: #9cc17f; }
+
+.und-result { margin-top: 1.25rem; }
+.und-app > .spy-status { margin: 1rem 0 0; color: var(--ink-soft); }
+.und-app > .spy-status:empty { display: none; }
+
+/* Past launches */
+.und-launches { margin-top: 2.5rem; }
+.und-launches header h2 { margin: 0; color: var(--forest-deep); font-family: var(--serif); font-size: 1.5rem; font-weight: 600; }
+.und-launches header p { margin: .3rem 0 1rem; color: var(--ink-soft); }
+.und-launch-list { display: grid; gap: .6rem; margin: 0; padding: 0; list-style: none; }
+.und-launch-list li {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem 1.25rem;
+  padding: .85rem 1rem; border: 1px solid var(--line); border-radius: 8px; background: rgb(69 65 58 / 45%);
+}
+.und-launch-text { display: grid; gap: .15rem; min-width: 0; }
+.und-launch-text strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+.und-launch-text span { color: var(--ink-soft); overflow-wrap: anywhere; }
+.und-launch-text small { color: #9cc17f; }
+
+/* Sign-in box */
+.und-login { display: grid; gap: .9rem; max-width: 26rem; margin: 0 auto; grid-template-columns: 1fr; }
+.und-login h2 { margin: 0; color: var(--forest-deep); font-family: var(--serif); font-size: 1.5rem; font-weight: 600; }
+.und-login label { display: grid; gap: .35rem; }
+.und-login-error { margin: 0; color: #f0a58a; }
+.und-login-error:empty { display: none; }
+.und-app[hidden], .und-login[hidden] { display: none; }
+
+/* Errors and the read summary */
+.und-app > .spy-status.is-error, .und-publish-note.is-error { color: #f0a58a; }
+.und-summary { display: flex; flex-wrap: wrap; gap: .45rem; margin: 0; padding: 0; list-style: none; }
+.und-summary[hidden] { display: none; }
+.und-summary li { padding: .3rem .7rem; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); color: var(--ink); font-size: .88rem; }
+.und-summary li.is-warn { border-color: #c98a5a; color: #f0c08a; }
+
+/* The plot from the server */
+.und-result[data-state="ready"] .spy-frame { aspect-ratio: auto; border-style: solid; }
+
+/* Past launches: status colours and actions */
+.und-launch-text small.is-failed { color: #f0a58a; }
+.und-launch-text small.is-retracted { color: var(--ink-soft); }
+.und-launch-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.und-launch-actions .spy-secondary { min-height: 2.5rem; padding: .35rem .85rem; font-size: .9rem; }
+.und-summary li.is-action { padding: 0; border: 0; background: none; }
+.und-summary-action { padding: .3rem .8rem; border: 1px solid var(--ochre); border-radius: 999px; background: var(--forest); color: var(--paper); font: inherit; font-size: .88rem; font-weight: 650; cursor: pointer; }
+.und-summary-action:hover { filter: brightness(1.1); }
+
+/* Side panel: what the file held, the time note, and the collapsed sections */
+[data-source="und"] .spy-upload-summary.is-warn { color: #f0c08a; }
+.und-time .spy-step-note.is-warn, .und-section-value.is-warn { color: #f0c08a; }
+.und-section { border-top: 1px solid var(--line); }
+.und-section > summary {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: .6rem;
+  padding: .8rem 0; list-style: none; cursor: pointer;
+}
+.und-section > summary::-webkit-details-marker { display: none; }
+.und-section-name { color: var(--forest-deep); font-family: var(--serif); font-size: 1.05rem; font-weight: 600; }
+.und-section-value { overflow: hidden; color: var(--ink-soft); font-size: .9rem; text-overflow: ellipsis; white-space: nowrap; }
+.und-section-change { color: var(--ochre); font-size: .88rem; font-weight: 650; }
+/* "Change ▸" while closed, "Collapse ▾" while open */
+.und-section-change::after { content: " ▸"; }
+.und-section[open] > summary .und-section-change::after { content: " ▾"; }
+.und-section-change > span + span, .und-section[open] > summary .und-section-change > span:first-child { display: none; }
+.und-section[open] > summary .und-section-change > span + span { display: inline; }
+.und-section > summary:hover .und-section-change { text-decoration: underline; }
+.und-section > summary:focus-visible { outline: 2px solid var(--ochre); outline-offset: 2px; }
+.und-section-body { display: grid; gap: .75rem; padding-bottom: 1rem; }
+.und-site-note { margin: 0; color: #f0c08a; font-size: .9rem; line-height: 1.6; }
+
+/* Two columns: a fixed-size map, so opening a section on the right never stretches it, and a narrower
+   map than the main app's, so the right column has more room. The columns don't stretch to match. */
+@media (min-width: 821px) {
+  .spy-panel[data-source="und"] { grid-template-columns: minmax(0, 1.15fr) minmax(320px, 1fr); align-items: start; }
+  [data-source="und"] .spy-upload-start .spy-map { flex: none; height: 520px; min-height: 0; }
+}
+.und-section-body .und-time-row { margin-top: 0; }

@@ -1,5 +1,7 @@
 ---
-// Full-screen, zoomable view of the sounding. Opened by clicking the plot; driven by sounding-app.js.
+// Full-screen, zoomable view of the sounding. Opened by clicking the plot; driven by sounding-app.js
+// (and und-uploader.js, which leaves out the data-file downloads: `downloads={false}`).
+const { downloads = true } = Astro.props;
 ---
 <dialog class="spy-viewer" aria-label="Sounding viewer">
   <div class="spy-viewer-bar">
@@ -22,7 +24,7 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19.5h14" /></svg>
         PNG
       </a>
-      {[["csv", "CSV", "profile data"], ["sharppy", "SHARPpy", "input file"], ["cm1", "CM1", "input sounding"]].map(([type, label, note]) => (
+      {downloads && [["csv", "CSV", "profile data"], ["sharppy", "SHARPpy", "input file"], ["cm1", "CM1", "input sounding"]].map(([type, label, note]) => (
         <button type="button" data-download={type} title={`Download ${label} ${note}`}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19.5h14" /></svg>
           {label}

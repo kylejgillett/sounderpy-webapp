@@ -7,10 +7,17 @@
 //
 // Station rows are compact arrays: [id, name, region, lat, lon, elevation_m]. BUFKIT rows add a
 // seventh entry: the models with files for that station, as letters (see BUFKIT_MODEL_CODES).
+// RAOB rows add the station's details from SounderPy's master list (see raobStations).
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { mesh } from "topojson-client";
 
 const SRC = "https://raw.githubusercontent.com/kylejgillett/sounderpy/main/src";
+// SounderPy 3.3's RAOB/IGRA station list. It's on the development branch until 3.3.0 is released; then
+// switch to main. RAOB_LIST can also name a local copy: RAOB_LIST=~/sounderpy/src/sounderpy/RAOB-STATIONS-MASTER.csv
+const RAOB_LIST = process.env.RAOB_LIST
+  ?? "https://raw.githubusercontent.com/kylejgillett/sounderpy/development/src/sounderpy/RAOB-STATIONS-MASTER.csv";
 const NE = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson";
 const OUT = new URL("../public/data/", import.meta.url);
 const BORDERS = {
@@ -29,17 +36,39 @@ async function fetchText(url) {
 const fetchLines = async (file) => (await fetchText(`${SRC}/${file}`)).split(/\r?\n/);
 const fetchJson = async (url) => JSON.parse(await fetchText(url));
 
-// WMO,ICAO,NAME,LOC,EL(m),LAT,A,LON,B
+// One CSV line as trimmed fields. Quoted fields may hold commas ("Ny-Alesund II, Svalbard").
+const csvFields = (line) => (line.match(/\s*("[^"]*"|[^,]*)\s*(,|$)/g) ?? [])
+  .map((v) => v.trim().replace(/,$/, "").trim().replace(/^"|"$/g, ""));
+
+// Which lists a station is in, as letters: the site shows them as "Listed by" in the station popup.
+const RAOB_LIST_CODES = { IGRA2: "i", WYOMING: "w", OSCAR: "o", NCAR: "n", OLD_RAOB: "r" };
+
+// One row per station with a location:
+// [id, name, region, lat, lon, elevation_m, active (1/0), [first year, last year] of its IGRAv2 record or 0,
+//  WMO, ICAO, IGRAv2 ID, other ICAO codes, former name, lists (RAOB_LIST_CODES), known data (1/0)].
+// Known data: active, an IGRAv2 record, or seen in Wyoming's recent files. SounderPy warns on the rest
+// (utils.raob_station_has_no_known_data), and the map fades them.
+// The id is the one the form sends: ICAO, else WMO, else IGRAv2 (which SounderPy fetches from NOAA's IGRAv2).
 async function raobStations() {
+  const text = /^https?:/.test(RAOB_LIST)
+    ? await fetchText(RAOB_LIST)
+    : await readFile(RAOB_LIST.replace(/^~(?=\/)/, homedir()), "utf8");
+  const [header, ...lines] = text.split(/\r?\n/).filter(Boolean);
+  const columns = csvFields(header);
   const rows = [];
-  for (const line of await fetchLines("RAOB-STATIONS.txt")) {
-    const f = line.split(",").map((v) => v.trim());
-    if (f.length < 9 || !/^\d+$/.test(f[0])) continue;
-    const lat = Number(f[5]) * (f[6] === "S" ? -1 : 1);
-    const lon = Number(f[7]) * (f[8] === "W" ? -1 : 1);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
-    const id = /^-+$/.test(f[1]) || !f[1] ? f[0] : f[1];
-    rows.push([id, titleCase(f[2]), f[3], round(lat), round(lon), Number(f[4]) || 0]);
+  for (const line of lines) {
+    const f = Object.fromEntries(csvFields(line).map((v, i) => [columns[i], v]));
+    const lat = Number(f.LAT), lon = Number(f.LON);
+    if (!f.LAT || !f.LON || !Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    // "Norman, OK" -> Norman + OK; a name without a region gets the country code ("Jan Mayen", NO).
+    const comma = f.DISPLAY_NAME.lastIndexOf(", ");
+    const [name, region] = comma > 0 ? [f.DISPLAY_NAME.slice(0, comma), f.DISPLAY_NAME.slice(comma + 2)] : [f.DISPLAY_NAME || titleCase(f.NAME), f.CC];
+    const record = f.IGRA_FIRST_YEAR && f.IGRA_LAST_YEAR ? [Number(f.IGRA_FIRST_YEAR), Number(f.IGRA_LAST_YEAR)] : 0;
+    const formerName = f.OLD_NAME && titleCase(f.OLD_NAME) !== titleCase(name) ? titleCase(f.OLD_NAME) : "";
+    const lists = f.SOURCES.split(/\s+/).map((s) => RAOB_LIST_CODES[s] ?? "").join("");
+    rows.push([f.ICAO || f.WMO || f.IGRA_ID, name, region, round(lat), round(lon), Math.round(Number(f.ELEV_M)) || 0,
+      f.ACTIVE === "Y" ? 1 : 0, record, f.WMO, f.ICAO, f.IGRA_ID, f.ICAO_ALT, formerName, lists,
+      f.ACTIVE === "Y" || f.IGRA_ID || f.WYOMING_SEEN ? 1 : 0]);
   }
   return rows;
 }
@@ -112,8 +141,45 @@ const trim = (fc, keep = () => true) => ({
 });
 
 const lakes = async () => trim(await fetchJson(`${NE}/ne_50m_lakes.geojson`));
-const highways = async () => trim(await fetchJson(`${NE}/ne_10m_roads.geojson`),
+let roadsJson; // ~50 MB, so it's downloaded once even when both road files are built
+const neRoads = () => (roadsJson ??= fetchJson(`${NE}/ne_10m_roads.geojson`));
+const highways = async () => trim(await neRoads(),
   (p) => p.continent === "North America" && p.type === "Major Highway");
+// Every Natural Earth road around Grand Forks, for the UND uploader's map. `major` styles interstates.
+const UND_BOX = { south: 45.5, north: 51, west: -101, east: -93 };
+const undRoads = async () => {
+  const touchesBox = (c) => (typeof c[0] === "number"
+    ? c[1] > UND_BOX.south && c[1] < UND_BOX.north && c[0] > UND_BOX.west && c[0] < UND_BOX.east
+    : c.some(touchesBox));
+  const fc = await neRoads();
+  return {
+    type: "FeatureCollection",
+    features: fc.features
+      .filter((f) => f.geometry && touchesBox(f.geometry.coordinates))
+      .map((f) => ({
+        type: "Feature",
+        properties: { major: f.properties.type === "Major Highway" ? 1 : 0 },
+        geometry: { type: f.geometry.type, coordinates: roundCoords(f.geometry.coordinates) },
+      })),
+  };
+};
+// County lines in ND, MN, and SD for the UND map (Census, via us-atlas), only where they touch UND_BOX.
+// Lines along state borders are left out, since the basemap already draws those.
+const UND_STATES = ["38", "27", "46"]; // FIPS: North Dakota, Minnesota, South Dakota
+const undCounties = async () => {
+  const us = await fetchJson("https://cdn.jsdelivr.net/npm/us-atlas@3.0.1/counties-10m.json");
+  const counties = { ...us.objects.counties, geometries: us.objects.counties.geometries.filter((g) => UND_STATES.includes(g.id.slice(0, 2))) };
+  const lines = mesh(us, counties, (a, b) => a !== b && a.id.slice(0, 2) === b.id.slice(0, 2)).coordinates;
+  const inBox = ([lon, lat]) => lat > UND_BOX.south && lat < UND_BOX.north && lon > UND_BOX.west && lon < UND_BOX.east;
+  const fine = (n) => Math.round(n * 1000) / 1000; // ~100 m, so county corners stay sharp zoomed in
+  return {
+    type: "FeatureCollection",
+    features: [{
+      type: "Feature", properties: {},
+      geometry: { type: "MultiLineString", coordinates: lines.filter((l) => l.some(inBox)).map((l) => l.map(([x, y]) => [fine(x), fine(y)])) },
+    }],
+  };
+};
 // [name, lat, lon, min_zoom] — min_zoom decides when a town's label appears.
 const places = async () => (await fetchJson(`${NE}/ne_10m_populated_places_simple.geojson`)).features
   .map(({ properties: p }) => [p.name, round(p.latitude), round(p.longitude), p.min_zoom])
@@ -126,6 +192,8 @@ const outputs = {
   "airports.json": airports,
   "lakes-50m.json": lakes,
   "highways-na.json": highways,
+  "und-roads.json": undRoads,
+  "und-counties.json": undCounties,
   "places.json": places,
 };
 const only = process.argv.slice(2);

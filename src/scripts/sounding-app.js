@@ -15,7 +15,6 @@ const result = $(".spy-result");
 const settingsEl = $("#settings");
 const isMobile = window.matchMedia?.("(pointer: coarse)").matches ?? false; // phones and tablets get the app-like extras
 let lastRequest = null;
-let srHodoSounding = false; // whether the server can draw full soundings storm relative (from /api/health)
 let lastShareUrl = null; // address of the sounding on screen, with the settings it was made with
 let lastPlotFile = null; // the plot on screen as a file, ready for the phone's share sheet
 
@@ -71,7 +70,13 @@ function readSettings() {
     const v = num(f(`sfc_${key}`).value);
     if (v !== null) sfc[key] = v;
   }
+  if (Object.keys(sfc).length && f("sfc_method").value !== "mix") {
+    sfc.method = f("sfc_method").value;
+    if (sfc.method === "blend" && num(f("sfc_depth").value) !== null) sfc.depth = num(f("sfc_depth").value);
+  }
   return {
+    winter: f("winter").checked,
+    ylim_top: num(f("ylim_top").value),
     dark_mode: f("dark_mode").checked,
     color_blind: f("color_blind").checked,
     ecape: f("ecape").checked,
@@ -156,15 +161,23 @@ function settingsSummary(s) {
   const sm = Array.isArray(s.storm_motion)
     ? `${s.storm_motion[0]}° at ${s.storm_motion[1]} kt`
     : { left_moving: "left mover", mean_wind: "mean wind" }[s.storm_motion];
-  const sfc = s.modify_sfc && Object.entries(s.modify_sfc)
-    .map(([k, v]) => `${k} ${v}${{ T: "°C", Td: "°C", ws: " kt", wd: "°" }[k]}`).join(", ");
+  const SFC_UNITS = { T: "°C", Td: "°C", ws: " kt", wd: "°" };
+  const sfcMethod = s.modify_sfc?.method;
+  const sfc = s.modify_sfc && [
+    ...Object.entries(s.modify_sfc).filter(([k]) => k in SFC_UNITS).map(([k, v]) => `${k} ${v}${SFC_UNITS[k]}`),
+    sfcMethod === "replace" && "surface level only",
+    sfcMethod === "blend" && `blended to ${s.modify_sfc.depth ?? 500} m`,
+  ].filter(Boolean).join(", ");
+  const winter = s.winter && !s.hodo;
   return [
+    winter && "Winter sounding",
+    s.ylim_top && !s.hodo && "Pressure range: surface to 500 hPa",
     s.dark_mode && "Dark mode",
     !s.color_blind && "Standard colors (color-blind mode off)",
-    s.ecape && "ECAPE parcel path",
+    s.ecape && !winter && "ECAPE parcel path",
     s.hodo && "Hodograph only",
-    s.sr_hodo && (s.hodo || srHodoSounding ? "Storm-relative hodograph" : "Storm-relative (hodograph-only plots)"),
-    s.hodo_boundary_angle != null && `Boundary axis at ${s.hodo_boundary_angle}°`,
+    s.sr_hodo && !winter && "Storm-relative hodograph",
+    s.hodo_boundary_angle != null && !winter && `Boundary axis at ${s.hodo_boundary_angle}°`,
     s.map_zoom !== 0 && `Map zoom ${s.map_zoom}`,
     s.radar && `Radar: ${{ "single-site": "NEXRAD site", mosaic: "MRMS mosaic" }[s.radar]}${s.radar_time ? ` at ${s.radar_time.replace("T", " ")} UTC` : ""}`,
     sm && `Storm motion: ${sm}`,
@@ -288,7 +301,7 @@ async function runSounding(req, { record = false } = {}) {
   result.scrollIntoView({ behavior: "smooth", block: "nearest" });
   try {
     const path = isComposite ? "/api/composite" : isUpload ? "/api/upload-sounding" : "/api/sounding";
-    const { label, info, image, levels } = await (await api(path, req)).json();
+    const { label, info, image, levels, notes } = await (await api(path, req)).json();
     if (id !== requestId) return;
     lastRequest = req;
     $(".spy").dataset.result = isComposite ? "composite" : isUpload ? "upload" : "sounding"; // these two hide data-file downloads
@@ -302,6 +315,7 @@ async function runSounding(req, { record = false } = {}) {
     jumpToPlot(img, id);
     if (record && shareUrl && shareUrl !== location.pathname + location.search) history.replaceState(null, "", shareUrl);
     setBusy(false);
+    status.textContent = notes?.join(" ") ?? ""; // e.g. radar that couldn't be drawn
     stopLoading();
   } catch (err) {
     if (id !== requestId) return;
@@ -516,16 +530,29 @@ async function initMap(form) {
   const el = $(".spy-map", form);
 
   try {
-    const { createBaseMap, fetchData, stationLayer, launchControl, pointPicker, airportLayer, FAINT_DOT, BUFKIT_MODEL_CODES } = await import("./station-map.js");
+    const { createBaseMap, fetchData, stationLayer, launchControl, pointPicker, airportLayer, FAINT_DOT, BUFKIT_MODEL_CODES,
+      raobPopup, raobIds, raobActive, raobHasData, raobFetchId } = await import("./station-map.js");
     const map = maps[source].map = createBaseMap(el);
 
     if (source === "raob" || source === "bufkit") {
       const rows = await fetchData(`${source}-stations.json`);
       let launches = null;
-      const layer = stationLayer(map, rows, { onPick: ([id]) => { form.site.value = id; launches?.pick(id); } });
+      const pick = (id) => { form.site.value = id; launches?.pick(id); return id; };
+      const layer = source === "raob"
+        // Any of a station's IDs finds it. Inactive stations fade, with labels from state zoom; those with no
+        // known data stay off the map but can still be typed in.
+        // Inactive ones fetch from IGRAv2 unless another ID is picked.
+        ? stationLayer(map, rows, {
+          ids: raobIds, popupHtml: raobPopup, note: (row) => (raobActive(row) ? "" : " · inactive"),
+          dim: (row) => !raobActive(row), hidden: (row) => !raobHasData(row),
+          onPick: (row, id = raobFetchId(row)) => pick(id),
+        })
+        : stationLayer(map, rows, { onPick: ([id]) => { pick(id); } });
       layer.select(form.site.value);
       form.site.addEventListener("input", () => layer.select(form.site.value, { pan: true }));
-      if (source === "raob") launches = trackLaunches(form, map, layer, launchControl);
+      if (source === "raob") {
+        launches = trackLaunches(form, map, layer, launchControl);
+      }
       if (source === "bufkit") {
         // Fade stations without the chosen model. A station with no model list is left alone.
         const filter = () => {
@@ -664,8 +691,14 @@ for (const name of ["airport", "hour"]) {
 // "Customize figure": show how many settings differ from the defaults, and allow a reset.
 const settingsForm = $(".spy-settings-form");
 function updateSettingsCount() {
-  // On a server whose SounderPy has no sr_hodo for full soundings, say when the option won't apply.
-  $("[data-sr-note]").hidden = srHodoSounding || !(settingsForm.elements.namedItem("sr_hodo").checked && !settingsForm.elements.namedItem("hodo").checked);
+  const field = (name) => settingsForm.elements.namedItem(name);
+  settingsForm.querySelector("[data-sfc-depth]").hidden = field("sfc_method").value !== "blend";
+  // A winter sounding ignores these, so they're greyed out while it's on (hodograph-only plots aren't winter).
+  const winter = field("winter").checked && !field("hodo").checked;
+  for (const name of ["ecape", "sr_hodo", "hodo_boundary_angle"]) field(name).disabled = winter;
+  settingsForm.querySelector("[data-winter-note]").hidden = !winter;
+  // The map shows whenever its zoom is above 0, so the toggle follows the zoom box.
+  settingsForm.querySelector("[data-map-toggle]").checked = (num(field("map_zoom").value) ?? 0) > 0;
   const n = settingsSummary(readSettings()).length;
   for (const badge of $$(".spy-settings-count")) {
     badge.textContent = `${n} change${n === 1 ? "" : "s"}`;
@@ -677,6 +710,13 @@ $$("[data-open-settings]").forEach((b) => b.addEventListener("click", () => sett
 $$("[data-close-settings]").forEach((b) => b.addEventListener("click", () => settingsEl.close()));
 settingsEl.addEventListener("click", (e) => { if (e.target === settingsEl) settingsEl.close(); }); // backdrop
 // Radar is drawn on the map, so choosing it needs a visible map.
+// Map on starts at zoom 2 (adjustable in the box); off sets zoom 0. This runs on "input", before the
+// form's own listener syncs the toggle back to the zoom box.
+settingsForm.querySelector("[data-map-toggle]").addEventListener("input", (e) => {
+  const zoom = settingsForm.elements.namedItem("map_zoom");
+  if (e.target.checked && !(Number(zoom.value) > 0)) zoom.value = "2";
+  if (!e.target.checked) zoom.value = "0";
+});
 settingsForm.elements.namedItem("radar").addEventListener("change", (e) => {
   const zoom = settingsForm.elements.namedItem("map_zoom");
   if (e.target.value && Number(zoom.value) === 0) zoom.value = "2";
@@ -1251,10 +1291,6 @@ async function checkHealth() {
     const info = await (await api("/api/health")).json();
     health.dataset.state = "online";
     text.textContent = `Server online · SounderPy v${info.sounderpy_version}`;
-    if (srHodoSounding !== Boolean(info.sr_hodo_sounding)) {
-      srHodoSounding = Boolean(info.sr_hodo_sounding);
-      updateSettingsCount();
-    }
     $(".spy-footer-version").textContent = ` v${info.sounderpy_version}`;
   } catch {
     health.dataset.state = "offline";

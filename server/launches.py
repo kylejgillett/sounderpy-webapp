@@ -24,13 +24,22 @@ CHECK_DELAY = dt.timedelta(hours=1)  # the timer checks a launch time an hour af
 RETRY_SECONDS = 3600  # lists that may still fill in, when the timer isn't the one keeping them current
 FINAL_AFTER = dt.timedelta(days=2)
 
-# IEM IDs that the site's station list knows by another ID.
+# IEM IDs that SounderPy's station list (RAOB-STATIONS-MASTER.csv) files under another ICAO code. The map
+# finds a station by any of its IDs, but a launch list should name the station the way the map does.
 STATION_ALIASES = {
-    "CWMJ": "CWMW", "CWPL": "CYPL", "CWQI": "CYQI", "CYAH": "CZAG", "CYEU": "CWEU", "CYLT": "CWLT", "CYPH": "CWPH",
-    "K1Y7": "KNYL", "KALY": "KALB", "KLKN": "KEKO", "KMFL": "KMIA", "KOTX": "KGEG", "KPSR": "74626", "KSIL": "KLIX",
-    "MMGM": "MGYM", "MMUN": "MCUN", "PANN": "PANT", "PBET": "PABE", "PBRW": "PABR", "PCDB": "PACD", "PFAI": "PAFA",
-    "PHLI": "PLIH", "PITO": "PHTO", "PMCG": "PAMC", "POME": "PAOM", "POTZ": "PAOT", "PYAK": "PAYA",
+    "CWMJ": "CWMW", "CWPL": "CYPL", "CWQI": "CYQI", "CYEU": "CWEU", "CYLT": "CWLT", "CYPH": "CWPH", "CZXS": "CYXS",
+    "KALY": "KALB", "KNKX": "KMYF", "KLKN": "KEKO", "KMFL": "KMIA", "KOTX": "KGEG", "KSIL": "KLIX", "MMGM": "MGYM",
+    "PANN": "PANT", "PBET": "PABE", "PBRW": "PABR", "PCDB": "PACD", "PFAI": "PAFA", "PITO": "PHTO",
+    "PMCG": "PAMC", "POME": "PAOM", "POTZ": "PAOT", "PYAK": "PAYA",
+    # Stored lists from before the new station list used these IDs, which it now lists under their own codes.
+    "CZAG": "CYAH", "KNYL": "K1Y7", "74626": "KPSR", "MCUN": "MMUN", "PLIH": "PHLI",
 }
+
+
+def _map_ids(stations):
+    """A launch list with each site named as the station map names it."""
+    return sorted({STATION_ALIASES.get(station, station) for station in stations})
+
 
 # Kept apart from the profile cache, which removes old entries: this is a permanent record.
 LAUNCH_STORE = diskcache.Cache(
@@ -44,11 +53,11 @@ def _store_key(when):
 
 
 def _fetch_stations(when):
-    """Sorted site IDs with a sounding at this time."""
+    """Sorted site IDs with a sounding at this time, as IEM names them."""
     response = requests.get(IEM_RAOB_URL, params={"ts": when.strftime("%Y-%m-%dT%H:00:00Z")}, timeout=60)
     response.raise_for_status()
     stations = (profile["station"] for profile in response.json()["profiles"])
-    return sorted({STATION_ALIASES.get(station, station) for station in stations})
+    return sorted(set(stations))
 
 
 def get_launches(day, hour):
@@ -64,7 +73,7 @@ def get_launches(day, hour):
         stations = _fetch_stations(when)
         final = stations and now - when >= FINAL_AFTER
         LAUNCH_STORE.set(key, stations, expire=None if final else RETRY_SECONDS)
-    return stations
+    return _map_ids(stations)
 
 
 def _recent_cycles(now):

@@ -209,6 +209,30 @@
 .spy .spy-check { display: flex; align-items: center; gap: .6rem; color: var(--ink); font-weight: 500; }
 .spy-check input { width: 1.15rem; height: 1.15rem; accent-color: var(--forest); }
 .spy-pair { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+.spy-pair[hidden] { display: none; }
+.spy-map-zoom { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: .6rem; }
+.spy-map-zoom .spy-check { padding-bottom: .55rem; white-space: nowrap; }
+
+/* Figure settings: on/off switches instead of small checkboxes, so each setting's state is obvious. */
+.spy-settings-form .spy-check { min-height: 2rem; cursor: pointer; }
+.spy-settings-form .spy-check input[type="checkbox"] {
+  appearance: none; position: relative; flex: none; width: 2.6rem; height: 1.45rem; margin: 0;
+  border: 1px solid var(--control-border); border-radius: 999px; background: var(--paper); cursor: pointer;
+  transition: background-color .15s, border-color .15s;
+}
+.spy-settings-form .spy-check input[type="checkbox"]::before {
+  content: ""; position: absolute; top: 50%; left: .18rem; width: 1rem; height: 1rem; border-radius: 50%;
+  background: var(--ink-soft); transform: translateY(-50%); transition: transform .15s, background-color .15s;
+}
+.spy-settings-form .spy-check input[type="checkbox"]:checked { border-color: #7fc28a; background: #4f7a55; }
+.spy-settings-form .spy-check input[type="checkbox"]:checked::before { background: #f6ebd2; transform: translate(1.12rem, -50%); }
+.spy-settings-form .spy-check input[type="checkbox"]:focus-visible { outline: 2px solid var(--ochre); outline-offset: 2px; }
+.spy-settings-form .spy-check:has(input:checked) { color: var(--forest-deep); font-weight: 600; }
+.spy-settings-form .spy-check:has(input:disabled) { opacity: .45; cursor: default; }
+.spy-settings-form .spy-check input:disabled { cursor: default; }
+@media (prefers-reduced-motion: reduce) {
+  .spy-settings-form .spy-check input[type="checkbox"], .spy-settings-form .spy-check input[type="checkbox"]::before { transition: none; }
+}
 
 .spy-status { min-height: 1.5rem; margin: 1.25rem 0 0; color: var(--ochre); font-weight: 600; }
 .spy-status.is-error { color: #f0a58a; }
@@ -361,7 +385,7 @@
   .spy-tabs button[aria-selected="true"] { border-color: var(--ochre); }
   .spy-composite { padding: 1rem; }
   .spy-panel { padding: 1rem; }
-  .spy-map { min-height: 320px; }
+  .spy-map { min-height: min(62vh, 440px); }
   .spy-meta { flex-direction: column; }
   .spy-caption { grid-template-columns: minmax(0, 1fr); }
   .spy-downloads { grid-template-columns: repeat(2, minmax(0, 1fr)); }

@@ -6,9 +6,9 @@ import FormActions from "./FormActions.astro";
 <form class="spy-panel" data-source="raob">
   <div class="spy-map" role="region" aria-label="RAOB station map"></div>
   <div class="spy-side">
-    <p class="spy-hint">Click a station on the map, or type its ID. Use the map to find available soundings: numbered dots show each North American site's latest launch hour (UTC) from the last two days.</p>
+    <p class="spy-hint">Click a station on the map, or type its ICAO, WMO, or IGRAv2 ID. Use the map to find available soundings: numbered dots show each North American site's latest launch hour (UTC) from the last two days. Faded dots are inactive stations, with past soundings only.</p>
     <div class="spy-fields">
-      <label>Site ID<input name="site" required placeholder="e.g. OAX" autocomplete="off" /></label>
+      <label>Site ID<input name="site" required placeholder="e.g. OAX or 72558" autocomplete="off" /></label>
       <label>Launch date (UTC)<input name="date" type="date" required /></label>
       <label>Launch hour (UTC)<input name="hour" required inputmode="numeric" placeholder="00 or 12" /></label>
     </div>
